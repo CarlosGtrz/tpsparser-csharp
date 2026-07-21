@@ -90,7 +90,7 @@ internal static class CsvExporter
             }
         }
 
-        headers.AddRange(table.Memos.Select(memo => memo.Name));
+        headers.AddRange(table.Memos.Select(memo => memo.ShortName.ToLowerInvariant()));
         return headers;
     }
 
@@ -157,7 +157,7 @@ internal static class CsvExporter
         foreach (var memo in memos.Where(memo => memo.IsBlob))
         {
             var token = SanitizeFileNamePart(
-                memo.ShortName,
+                memo.ShortName.ToLowerInvariant(),
                 memo.MemoNumber.ToString(CultureInfo.InvariantCulture));
             tokens[memo.MemoNumber] = MakeUnique(token, $"-{memo.MemoNumber}", usedNames);
         }
@@ -169,6 +169,7 @@ internal static class CsvExporter
     {
         null => string.Empty,
         string text => text.TrimEnd('\0', ' '),
+        byte[] bytes when bytes.All(value => value == 0) => string.Empty,
         byte[] bytes => $"0x{Convert.ToHexString(bytes)}",
         DateOnly date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         TimeOnly time => time.ToString("HH:mm:ss.FF", CultureInfo.InvariantCulture),

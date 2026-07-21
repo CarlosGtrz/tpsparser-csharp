@@ -46,7 +46,7 @@ public sealed class CsvExporterTests
                 {
                     ["T:TEXT"] = null,
                     ["T:ARRAY"] = new object?[] { null, null },
-                    ["T:BYTES"] = Array.Empty<byte>(),
+                    ["T:BYTES"] = new byte[8],
                     ["T:NULLBYTES"] = null,
                     ["T:DATE"] = null,
                     ["T:TIME"] = new TimeOnly(0, 0)
@@ -74,15 +74,38 @@ public sealed class CsvExporterTests
 
             var csv = File.ReadAllText(csvPath, Encoding.UTF8);
             Assert.StartsWith(
-                "RecordNumber,T:TEXT,T:ARRAY[1],T:ARRAY[2],T:BYTES,T:NULLBYTES,T:DATE,T:TIME,T:NOTE,T:A/B,T:A\\B\r\n",
+                "RecordNumber,T:TEXT,T:ARRAY[1],T:ARRAY[2],T:BYTES,T:NULLBYTES,T:DATE,T:TIME,note,a/b,a\\b\r\n",
                 csv);
             Assert.Contains(
-                "42,hello,1,2,0x01A4FF,,2024-02-03,04:05:06.07,\"line 1,\r\n\"\"line 2\"\"\",sample-42-A_B.blob,sample-42-A_B-3.blob\r\n",
+                "42,hello,1,2,0x01A4FF,,2024-02-03,04:05:06.07,\"line 1,\r\n\"\"line 2\"\"\",sample-42-a_b.blob,sample-42-a_b-3.blob\r\n",
                 csv);
-            Assert.Contains("43,,,,0x,,,00:00:00,,,\r\n", csv);
-            Assert.Equal(new byte[] { 0x00, 0xFF }, File.ReadAllBytes(Path.Combine(directory, "sample-42-A_B.blob")));
-            Assert.Empty(File.ReadAllBytes(Path.Combine(directory, "sample-42-A_B-3.blob")));
-            Assert.False(File.Exists(Path.Combine(directory, "sample-43-A_B.blob")));
+            Assert.Contains("43,,,,,,,00:00:00,,,\r\n", csv);
+            Assert.Equal(new byte[] { 0x00, 0xFF }, File.ReadAllBytes(Path.Combine(directory, "sample-42-a_b.blob")));
+            Assert.Empty(File.ReadAllBytes(Path.Combine(directory, "sample-42-a_b-3.blob")));
+            Assert.False(File.Exists(Path.Combine(directory, "sample-43-a_b.blob")));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Export_lowercases_short_memo_headers_and_allows_duplicates()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var field = Field(1, "T:KeepCase", TpsFieldType.String);
+            var textMemo = new TpsMemo(1, "FIRST:Value", "Value", 0, isBlob: false);
+            var blob = new TpsMemo(2, "SECOND:VALUE", "VALUE", 4, isBlob: true);
+            var table = new TpsTable(1, "T", [field], [textMemo, blob], [], []);
+
+            CsvExporter.Export(Path.Combine(directory, "headers.tps"), [table]);
+
+            Assert.Equal(
+                "RecordNumber,T:KeepCase,value,value\r\n",
+                File.ReadAllText(Path.Combine(directory, "headers.csv"), Encoding.UTF8));
         }
         finally
         {

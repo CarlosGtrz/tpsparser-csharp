@@ -32,7 +32,9 @@ Use `--csv` to export every record beside the TPS file. A single-table TPS file
 produces `<file>.csv`; a multi-table TPS file produces one
 `<file>-<table>.csv` per table. Text MEMOs are included as CSV columns, while
 BLOB values are written to separate `.blob` files and referenced by filename
-from their CSV columns. Existing export files are overwritten.
+from their CSV columns. MEMO and BLOB column headers use the unqualified,
+lowercase field name, which is also used in the corresponding `.blob` filename.
+Empty all-zero group values are left blank. Existing export files are overwritten.
 
 ## Basic usage
 
