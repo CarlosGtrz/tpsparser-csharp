@@ -21,11 +21,18 @@ that are currently open by a Clarion application.
 ```powershell
 dotnet run --project src\TpsInspector -c Release -- C:\data
 dotnet run --project src\TpsInspector -c Release -- C:\data\CUSTOMER.TPS --details
+dotnet run --project src\TpsInspector -c Release -- C:\data\CUSTOMER.TPS --csv
 ```
 
 Use `--recursive` to include subdirectories, `--owner <password>` for encrypted
 files, or `--ignore-errors` to attempt partial recovery from damaged pages.
 `--owner` can be repeated when a directory contains files with different keys.
+
+Use `--csv` to export every record beside the TPS file. A single-table TPS file
+produces `<file>.csv`; a multi-table TPS file produces one
+`<file>-<table>.csv` per table. Text MEMOs are included as CSV columns, while
+BLOB values are written to separate `.blob` files and referenced by filename
+from their CSV columns. Existing export files are overwritten.
 
 ## Basic usage
 
@@ -73,7 +80,8 @@ var parser = TpsParser.TpsParser.Open(
 - `StringEncoding` applies to field values, MEMO text, and table/schema names.
 - TIME values preserve hours, minutes, seconds, and hundredths of a second.
 - `GetBlob` returns a new byte array each call.
-- This version is read-only. It does not write, repair, or export TPS files to CSV.
+- The TPS parser remains read-only; CSV export is provided by the inspector and
+  never modifies the source TPS file.
 
 ## Attribution and license
 

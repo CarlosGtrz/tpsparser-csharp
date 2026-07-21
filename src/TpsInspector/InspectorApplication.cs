@@ -74,6 +74,28 @@ internal static class InspectorApplication
                 continue;
             }
 
+            if (options.Csv)
+            {
+                try
+                {
+                    CsvExporter.Export(file, parser!.Tables);
+                }
+                catch (IOException ex)
+                {
+                    failed++;
+                    output.WriteLine($"ERROR  {file}");
+                    output.WriteLine($"       Could not export CSV: {ex.Message}");
+                    continue;
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    failed++;
+                    output.WriteLine($"ERROR  {file}");
+                    output.WriteLine($"       Could not export CSV: {ex.Message}");
+                    continue;
+                }
+            }
+
             succeeded++;
             var tableCount = parser!.Tables.Count;
             var recordCount = parser.Tables.Sum(table => (long)table.Records.Count);
@@ -221,6 +243,7 @@ internal static class InspectorApplication
         output.WriteLine("  --ignore-errors   Skip damaged pages and recover readable data.");
         output.WriteLine("  --owner <key>     Owner key for encrypted files; may be repeated.");
         output.WriteLine("  --details         Show tables, field definitions, and first-record sample values.");
+        output.WriteLine("  --csv             Export every table and record to CSV files beside each TPS file.");
         output.WriteLine("  -h, --help        Show this help.");
         output.WriteLine();
         output.WriteLine("Exit codes: 0=success, 1=invalid usage/path, 2=one or more TPS files failed.");
@@ -231,6 +254,7 @@ internal static class InspectorApplication
         bool Recursive,
         bool IgnoreErrors,
         bool Details,
+        bool Csv,
         IReadOnlyList<string> Owners)
     {
         public static CommandLineParseResult Parse(string[] arguments)
@@ -245,6 +269,7 @@ internal static class InspectorApplication
             var recursive = false;
             var ignoreErrors = false;
             var details = false;
+            var csv = false;
 
             for (var i = 0; i < arguments.Length; i++)
             {
@@ -262,6 +287,9 @@ internal static class InspectorApplication
                         break;
                     case "--DETAILS":
                         details = true;
+                        break;
+                    case "--CSV":
+                        csv = true;
                         break;
                     case "--OWNER":
                         if (++i >= arguments.Length)
@@ -293,7 +321,7 @@ internal static class InspectorApplication
             }
 
             return new CommandLineParseResult(
-                new CommandLineOptions(path, recursive, ignoreErrors, details, owners),
+                new CommandLineOptions(path, recursive, ignoreErrors, details, csv, owners),
                 null,
                 ShowHelp: false);
         }
