@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CA1720;CA1724</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TpsParser.Tests" />
+  </ItemGroup>
+
+</Project>

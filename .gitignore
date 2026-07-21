@@ -1,0 +1,38 @@
+# .NET build outputs
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+publish/
+
+# Test and coverage outputs
+TestResults/
+coverage/
+coverage.*
+*.coverage
+*.coveragexml
+
+# Visual Studio and IDE state
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.sln.iml
+
+# NuGet packages and generated package artifacts
+packages/
+*.nupkg
+*.snupkg
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*~
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
