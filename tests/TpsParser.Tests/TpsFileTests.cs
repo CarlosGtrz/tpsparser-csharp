@@ -115,5 +115,202 @@ public sealed class TpsFileTests
         }
     }
 
+    [Fact]
+    public void MemoryStream_opens_with_expected_metadata_and_remains_open()
+    {
+        using var stream = new MemoryStream(File.ReadAllBytes(Fixture("CUSTOMER.TPS")));
+
+        var file = TpsFile.Open(stream);
+
+        var table = Assert.Single(file.Tables);
+        Assert.Equal(14, table.TableNumber);
+        Assert.Equal(7, table.Records.Count);
+        Assert.Equal(stream.Length, stream.Position);
+        Assert.True(stream.CanRead);
+    }
+
+    [Fact]
+    public void Encrypted_stream_opens_with_owner()
+    {
+        using var stream = new MemoryStream(File.ReadAllBytes(Fixture("encrypted-a.tps")));
+
+        var file = TpsFile.Open(stream, new TpsOpenOptions { Owner = "a" });
+
+        var table = Assert.Single(file.Tables);
+        Assert.Equal(2, table.TableNumber);
+        Assert.Equal(17, table.Records.Count);
+    }
+
+    [Fact]
+    public void TryOpen_stream_returns_error_without_source_path_and_leaves_stream_open()
+    {
+        using var stream = new MemoryStream(File.ReadAllBytes(Fixture("encrypted-a.tps")));
+
+        var ok = TpsFile.TryOpen(stream, out var file, out var error);
+
+        Assert.False(ok);
+        Assert.Null(file);
+        Assert.NotNull(error);
+        Assert.Contains("TPS stream", error.Message);
+        Assert.Null(error.SourcePath);
+        Assert.Equal(stream.Length, stream.Position);
+        Assert.True(stream.CanRead);
+    }
+
+    [Fact]
+    public void Malformed_stream_returns_parse_error_and_remains_open()
+    {
+        using var stream = new MemoryStream("not a topspeed file"u8.ToArray());
+
+        var ok = TpsFile.TryOpen(stream, out var file, out var error);
+
+        Assert.False(ok);
+        Assert.Null(file);
+        Assert.NotNull(error);
+        Assert.Contains("TPS stream", error.Message);
+        Assert.Null(error.SourcePath);
+        Assert.True(stream.CanRead);
+    }
+
+    [Fact]
+    public void Non_seekable_readable_stream_is_supported()
+    {
+        using var stream = new NonSeekableReadStream(File.ReadAllBytes(Fixture("CUSTOMER.TPS")));
+
+        var file = TpsFile.Open(stream);
+
+        Assert.Single(file.Tables);
+        Assert.Equal(7, file.Tables[0].Records.Count);
+        Assert.True(stream.CanRead);
+    }
+
+    [Fact]
+    public void Stream_parsing_starts_at_current_position()
+    {
+        var contents = File.ReadAllBytes(Fixture("CUSTOMER.TPS"));
+        var prefix = new byte[17];
+        var prefixedContents = new byte[prefix.Length + contents.Length];
+        prefix.CopyTo(prefixedContents, 0);
+        contents.CopyTo(prefixedContents, prefix.Length);
+        using var stream = new MemoryStream(prefixedContents) { Position = prefix.Length };
+
+        var file = TpsFile.Open(stream);
+
+        Assert.Single(file.Tables);
+        Assert.Equal(7, file.Tables[0].Records.Count);
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
+    [Fact]
+    public void Stream_must_be_non_null_and_readable()
+    {
+        Assert.Throws<ArgumentNullException>(() => TpsFile.Open((Stream)null!));
+
+        var stream = new MemoryStream();
+        stream.Dispose();
+
+        var error = Assert.Throws<ArgumentException>(() => TpsFile.Open(stream));
+        Assert.Equal("stream", error.ParamName);
+    }
+
+    [Fact]
+    public void Byte_array_opens_with_expected_metadata_and_records()
+    {
+        var data = File.ReadAllBytes(Fixture("CUSTOMER.TPS"));
+
+        var file = TpsFile.Open(data);
+
+        var table = Assert.Single(file.Tables);
+        Assert.Equal(14, table.TableNumber);
+        Assert.Equal(7, table.Records.Count);
+        Assert.Equal(1, table.GetRecord(16).GetInt32("CUSTNUMBER"));
+    }
+
+    [Fact]
+    public void Encrypted_byte_array_opens_with_owner_without_mutating_input()
+    {
+        var data = File.ReadAllBytes(Fixture("encrypted-a.tps"));
+        var originalData = data.ToArray();
+
+        var file = TpsFile.Open(data, new TpsOpenOptions { Owner = "a" });
+
+        var table = Assert.Single(file.Tables);
+        Assert.Equal(2, table.TableNumber);
+        Assert.Equal(17, table.Records.Count);
+        Assert.Equal(originalData, data);
+    }
+
+    [Fact]
+    public void TryOpen_encrypted_byte_array_without_owner_returns_error_without_source_path()
+    {
+        var data = File.ReadAllBytes(Fixture("encrypted-a.tps"));
+
+        var ok = TpsFile.TryOpen(data, out var file, out var error);
+
+        Assert.False(ok);
+        Assert.Null(file);
+        Assert.NotNull(error);
+        Assert.Contains("TPS byte array", error.Message);
+        Assert.Null(error.SourcePath);
+    }
+
+    [Fact]
+    public void TryOpen_malformed_byte_array_returns_error_without_source_path()
+    {
+        var data = "not a topspeed file"u8.ToArray();
+
+        var ok = TpsFile.TryOpen(data, out var file, out var error);
+
+        Assert.False(ok);
+        Assert.Null(file);
+        Assert.NotNull(error);
+        Assert.Contains("TPS byte array", error.Message);
+        Assert.Null(error.SourcePath);
+    }
+
+    [Fact]
+    public void Byte_array_must_be_non_null()
+    {
+        Assert.Throws<ArgumentNullException>(() => TpsFile.Open((byte[])null!));
+    }
+
     private static string Fixture(string name) => Path.Combine(AppContext.BaseDirectory, "Fixtures", name);
+
+    private sealed class NonSeekableReadStream(byte[] data) : Stream
+    {
+        private readonly MemoryStream _inner = new(data);
+
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+    }
 }

@@ -160,6 +160,29 @@ var file = TpsFile.Open(
     new TpsOpenOptions { Owner = "owner-password" });
 ```
 
+## Stream and byte-array input
+
+TPS data already held in memory can be parsed directly. The parser treats the
+array as read-only and does not retain or modify it, including for encrypted
+files:
+
+```csharp
+var file = TpsFile.Open(tpsBytes);
+```
+
+Use the stream overload when TPS data comes from a network response or another
+streaming source:
+
+```csharp
+using var stream = new MemoryStream(tpsBytes);
+var file = TpsFile.Open(stream);
+```
+
+The stream must be readable. Parsing starts at its current position and consumes
+through EOF, including for non-seekable streams. `TpsFile` never disposes or
+rewinds the supplied stream; ownership remains with the caller. The same contract
+applies to the `TpsFile.TryOpen(Stream, ...)` overload.
+
 ## Damaged files / partial recovery
 
 Set `IgnoreErrors` to discard unreadable pages and continue with later valid pages. For a truncated BLOB, it returns the available payload bytes after the BLOB length header. Records from a failed page are never returned partially.
@@ -174,6 +197,7 @@ var file = TpsFile.Open(
 
 - `TpsFile.Open` throws `TpsParseException` when the file cannot be opened or parsed.
 - `TpsFile.TryOpen` returns a `TpsParseError` instead of throwing.
+- Both methods accept a file path, a readable `Stream`, or a complete `byte[]`.
 - Field lookups accept full field names like `CUS:CUSTNUMBER` and unambiguous short names like `CUSTNUMBER`. When a short name occurs more than once, use its table-qualified name.
 - BCD/DECIMAL values are preserved losslessly as strings through `GetDecimalString`; `TryGetDecimal` is available when the value fits .NET `decimal`.
 - `StringEncoding` applies to field values, MEMO text, and table/schema names.

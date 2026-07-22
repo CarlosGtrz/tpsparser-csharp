@@ -7,14 +7,8 @@ internal sealed class TpsFileReader
     private readonly TpsBinaryReader _reader;
     private readonly Encoding _textEncoding;
 
-    public TpsFileReader(string path, Encoding textEncoding)
-        : this(ReadAllBytesShared(path), textEncoding)
+    public TpsFileReader(byte[] data, string owner, Encoding textEncoding, bool ignoreErrors)
     {
-    }
-
-    public TpsFileReader(string path, string owner, Encoding textEncoding, bool ignoreErrors)
-    {
-        var data = ReadAllBytesShared(path);
         var key = new TpsEncryptionKey(owner);
         if (data.Length < 0x200)
         {
@@ -45,7 +39,7 @@ internal sealed class TpsFileReader
         }
     }
 
-    private TpsFileReader(byte[] data, Encoding textEncoding)
+    public TpsFileReader(byte[] data, Encoding textEncoding)
     {
         _reader = new TpsBinaryReader(data);
         _textEncoding = textEncoding;
@@ -303,7 +297,7 @@ internal sealed class TpsFileReader
 
     private static bool IsEmptyBlock(int start, int end) => start == 0x200 && end == 0x200;
 
-    private static byte[] ReadAllBytesShared(string path)
+    internal static byte[] ReadAllBytesShared(string path)
     {
         using var stream = new FileStream(
             path,
@@ -311,15 +305,45 @@ internal sealed class TpsFileReader
             FileAccess.Read,
             FileShare.ReadWrite | FileShare.Delete);
 
-        if (stream.Length > int.MaxValue)
+        return ReadAllBytes(stream);
+    }
+
+    internal static byte[] ReadAllBytes(Stream stream)
+    {
+        if (stream.CanSeek)
         {
-            throw new NotSupportedException($"TPS files larger than {int.MaxValue} bytes are not supported.");
+            var remainingLength = Math.Max(0, stream.Length - stream.Position);
+            if (remainingLength > int.MaxValue)
+            {
+                throw InputTooLarge();
+            }
+
+            var data = new byte[(int)remainingLength];
+            stream.ReadExactly(data);
+            return data;
         }
 
-        var data = new byte[(int)stream.Length];
-        stream.ReadExactly(data);
-        return data;
+        using var output = new MemoryStream();
+        var buffer = new byte[81920];
+        while (true)
+        {
+            var bytesRead = stream.Read(buffer, 0, buffer.Length);
+            if (bytesRead == 0)
+            {
+                return output.ToArray();
+            }
+
+            if (output.Length > int.MaxValue - bytesRead)
+            {
+                throw InputTooLarge();
+            }
+
+            output.Write(buffer, 0, bytesRead);
+        }
     }
+
+    private static NotSupportedException InputTooLarge() =>
+        new($"TPS inputs larger than {int.MaxValue} bytes are not supported.");
 }
 
 internal sealed record ParsedTpsFile(

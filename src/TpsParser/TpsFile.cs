@@ -5,7 +5,15 @@ namespace TpsParser;
 
 public sealed class TpsFile
 {
+    private const string FormatName = "TPS";
     private readonly Dictionary<int, TpsTable> _tablesByNumber;
+
+    private enum InputKind
+    {
+        File,
+        Stream,
+        ByteArray
+    }
 
     private TpsFile(IReadOnlyList<TpsTable> tables)
     {
@@ -18,22 +26,12 @@ public sealed class TpsFile
     public static TpsFile Open(string path, TpsOpenOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        options ??= new TpsOpenOptions();
-        ArgumentNullException.ThrowIfNull(options.StringEncoding);
+        options = ValidateOptions(options);
 
         try
         {
-            var reader = OpenReader(path, options);
-            var contents = reader.Parse(options.IgnoreErrors);
-            if (contents.TableDefinitions.Count == 0)
-            {
-                throw new TpsParseException(new TpsParseError("No table definitions were found in the TPS file.", path));
-            }
-
-            var tables = contents.TableDefinitions
-                .Select(table => BuildTable(table.Key, table.Value, contents, options))
-                .ToArray();
-            return new TpsFile(tables);
+            var data = TpsFileReader.ReadAllBytesShared(path);
+            return Parse(data, options, InputKind.File, path);
         }
         catch (TpsParseException)
         {
@@ -41,7 +39,52 @@ public sealed class TpsFile
         }
         catch (Exception ex)
         {
-            throw new TpsParseException(new TpsParseError($"Could not open or parse TPS file '{path}': {ex.Message}", path, ex));
+            throw CreateOpenException(InputKind.File, ex, path);
+        }
+    }
+
+    public static TpsFile Open(Stream stream, TpsOpenOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        if (!stream.CanRead)
+        {
+            throw new ArgumentException("The stream must be readable.", nameof(stream));
+        }
+
+        options = ValidateOptions(options);
+
+        try
+        {
+            var data = TpsFileReader.ReadAllBytes(stream);
+            return Parse(data, options, InputKind.Stream, sourcePath: null);
+        }
+        catch (TpsParseException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw CreateOpenException(InputKind.Stream, ex);
+        }
+    }
+
+    public static TpsFile Open(byte[] data, TpsOpenOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        options = ValidateOptions(options);
+
+        try
+        {
+            var workingData = string.IsNullOrEmpty(options.Owner) ? data : data.ToArray();
+            return Parse(workingData, options, InputKind.ByteArray, sourcePath: null);
+        }
+        catch (TpsParseException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw CreateOpenException(InputKind.ByteArray, ex);
         }
     }
 
@@ -65,6 +108,46 @@ public sealed class TpsFile
         }
     }
 
+    public static bool TryOpen(
+        Stream stream,
+        out TpsFile? file,
+        out TpsParseError? error,
+        TpsOpenOptions? options = null)
+    {
+        try
+        {
+            file = Open(stream, options);
+            error = null;
+            return true;
+        }
+        catch (TpsParseException ex)
+        {
+            file = null;
+            error = ex.Error;
+            return false;
+        }
+    }
+
+    public static bool TryOpen(
+        byte[] data,
+        out TpsFile? file,
+        out TpsParseError? error,
+        TpsOpenOptions? options = null)
+    {
+        try
+        {
+            file = Open(data, options);
+            error = null;
+            return true;
+        }
+        catch (TpsParseException ex)
+        {
+            file = null;
+            error = ex.Error;
+            return false;
+        }
+    }
+
     public TpsTable GetTable(int tableNumber)
     {
         if (_tablesByNumber.TryGetValue(tableNumber, out var table))
@@ -75,23 +158,76 @@ public sealed class TpsFile
         throw new TpsParseException(new TpsParseError($"Table {tableNumber} was not found."));
     }
 
-    private static TpsFileReader OpenReader(string path, TpsOpenOptions options)
+    private static TpsFile Parse(
+        byte[] data,
+        TpsOpenOptions options,
+        InputKind inputKind,
+        string? sourcePath)
+    {
+        var reader = OpenReader(data, options);
+        var contents = reader.Parse(options.IgnoreErrors);
+        if (contents.TableDefinitions.Count == 0)
+        {
+            throw new TpsParseException(new TpsParseError(
+                $"No table definitions were found in the {Describe(inputKind)}.",
+                sourcePath));
+        }
+
+        var tables = contents.TableDefinitions
+            .Select(table => BuildTable(table.Key, table.Value, contents, options))
+            .ToArray();
+        return new TpsFile(tables);
+    }
+
+    private static TpsParseException CreateOpenException(
+        InputKind inputKind,
+        Exception exception,
+        string? sourcePath = null)
+    {
+        var pathSuffix = sourcePath is null ? string.Empty : $" '{sourcePath}'";
+        return new TpsParseException(new TpsParseError(
+            $"Could not open or parse {Describe(inputKind)}{pathSuffix}: {exception.Message}",
+            sourcePath,
+            exception));
+    }
+
+    private static string Describe(InputKind inputKind)
+    {
+        var inputName = inputKind switch
+        {
+            InputKind.File => "file",
+            InputKind.Stream => "stream",
+            InputKind.ByteArray => "byte array",
+            _ => throw new ArgumentOutOfRangeException(nameof(inputKind))
+        };
+
+        return $"{FormatName} {inputName}";
+    }
+
+    private static TpsFileReader OpenReader(byte[] data, TpsOpenOptions options)
     {
         if (string.IsNullOrEmpty(options.Owner))
         {
-            return new TpsFileReader(path, options.StringEncoding);
+            return new TpsFileReader(data, options.StringEncoding);
         }
 
         try
         {
-            var unencryptedFile = new TpsFileReader(path, options.StringEncoding);
+            var unencryptedFile = new TpsFileReader(data, options.StringEncoding);
             _ = unencryptedFile.GetHeader();
             return unencryptedFile;
         }
         catch (InvalidDataException)
         {
-            return new TpsFileReader(path, options.Owner, options.StringEncoding, options.IgnoreErrors);
+            return new TpsFileReader(data, options.Owner, options.StringEncoding, options.IgnoreErrors);
         }
+    }
+
+    private static TpsOpenOptions ValidateOptions(TpsOpenOptions? options)
+    {
+        options ??= new TpsOpenOptions();
+        ArgumentNullException.ThrowIfNull(options.StringEncoding);
+        return options;
     }
 
     private static TpsTable BuildTable(
