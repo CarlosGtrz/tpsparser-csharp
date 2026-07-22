@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using TpsParser;
 
 namespace TpsInspector;
@@ -536,8 +537,9 @@ internal static class StructuredCommands
 
 internal static class StructuredJson
 {
-    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
-    private static readonly JsonSerializerOptions Compact = new();
+    private static readonly StructuredJsonContext IndentedContext = new(
+        new JsonSerializerOptions { WriteIndented = true });
+    private static readonly StructuredJsonContext CompactContext = new(new JsonSerializerOptions());
 
     public static void WriteSchema(string source, IReadOnlyList<TpsTable> tables, TextWriter output)
     {
@@ -547,7 +549,7 @@ internal static class StructuredJson
             ["source"] = source,
             ["tables"] = tables.Select(CreateTableSchema).ToArray()
         };
-        output.WriteLine(JsonSerializer.Serialize(document, Indented));
+        output.WriteLine(JsonSerializer.Serialize(document, IndentedContext.StringObjectDictionary));
     }
 
     public static void WriteRows(string source, QueryResult query, string blobMode, TextWriter output)
@@ -571,14 +573,16 @@ internal static class StructuredJson
             },
             ["rows"] = query.Records.Select(record => CreateRow(query, record, blobMode, includeVersion: false)).ToArray()
         };
-        output.WriteLine(JsonSerializer.Serialize(document, Indented));
+        output.WriteLine(JsonSerializer.Serialize(document, IndentedContext.StringObjectDictionary));
     }
 
     public static void WriteRowsJsonLines(QueryResult query, string blobMode, TextWriter output)
     {
         foreach (var record in query.Records)
         {
-            output.WriteLine(JsonSerializer.Serialize(CreateRow(query, record, blobMode, includeVersion: true), Compact));
+            output.WriteLine(JsonSerializer.Serialize(
+                CreateRow(query, record, blobMode, includeVersion: true),
+                CompactContext.StringObjectDictionary));
         }
     }
 
@@ -698,4 +702,24 @@ internal static class StructuredJson
     private static string FormatNonFinite(double value) => double.IsNaN(value)
         ? "NaN"
         : double.IsPositiveInfinity(value) ? "Infinity" : "-Infinity";
+}
+
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSerializable(typeof(Dictionary<string, object?>), TypeInfoPropertyName = "StringObjectDictionary")]
+[JsonSerializable(typeof(Dictionary<string, object?>[]))]
+[JsonSerializable(typeof(object?[]))]
+[JsonSerializable(typeof(bool))]
+[JsonSerializable(typeof(byte))]
+[JsonSerializable(typeof(sbyte))]
+[JsonSerializable(typeof(short))]
+[JsonSerializable(typeof(ushort))]
+[JsonSerializable(typeof(int))]
+[JsonSerializable(typeof(uint))]
+[JsonSerializable(typeof(long))]
+[JsonSerializable(typeof(ulong))]
+[JsonSerializable(typeof(float))]
+[JsonSerializable(typeof(double))]
+[JsonSerializable(typeof(string))]
+internal partial class StructuredJsonContext : JsonSerializerContext
+{
 }
