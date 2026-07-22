@@ -295,19 +295,7 @@ public sealed class TpsRecord
 
         if (value is object?[] elements)
         {
-            if (!targetType.IsArray || targetType.GetArrayRank() != 1)
-            {
-                throw WrongType(name, requestedType.Name, value);
-            }
-
-            var elementType = targetType.GetElementType()!;
-            var converted = Array.CreateInstance(elementType, elements.Length);
-            for (var index = 0; index < elements.Length; index++)
-            {
-                converted.SetValue(ConvertValue(elements[index], elementType, name, fieldType), index);
-            }
-
-            return converted;
+            return ConvertArray(elements, targetType, name, fieldType);
         }
 
         if (value is TpsGroupValue group)
@@ -366,6 +354,62 @@ public sealed class TpsRecord
         }
 
         throw WrongType(name, requestedType.Name, value);
+    }
+
+    private static object ConvertArray(
+        object?[] elements,
+        Type targetType,
+        string name,
+        TpsFieldType? fieldType)
+    {
+        if (targetType == typeof(object[])) return ConvertArrayElements<object?>(elements, name, fieldType);
+        if (targetType == typeof(string[])) return ConvertArrayElements<string?>(elements, name, fieldType);
+        if (targetType == typeof(byte[][])) return ConvertArrayElements<byte[]?>(elements, name, fieldType);
+
+        if (targetType == typeof(byte[])) return ConvertArrayElements<byte>(elements, name, fieldType);
+        if (targetType == typeof(sbyte[])) return ConvertArrayElements<sbyte>(elements, name, fieldType);
+        if (targetType == typeof(short[])) return ConvertArrayElements<short>(elements, name, fieldType);
+        if (targetType == typeof(ushort[])) return ConvertArrayElements<ushort>(elements, name, fieldType);
+        if (targetType == typeof(int[])) return ConvertArrayElements<int>(elements, name, fieldType);
+        if (targetType == typeof(uint[])) return ConvertArrayElements<uint>(elements, name, fieldType);
+        if (targetType == typeof(long[])) return ConvertArrayElements<long>(elements, name, fieldType);
+        if (targetType == typeof(ulong[])) return ConvertArrayElements<ulong>(elements, name, fieldType);
+        if (targetType == typeof(float[])) return ConvertArrayElements<float>(elements, name, fieldType);
+        if (targetType == typeof(double[])) return ConvertArrayElements<double>(elements, name, fieldType);
+        if (targetType == typeof(decimal[])) return ConvertArrayElements<decimal>(elements, name, fieldType);
+
+        if (targetType == typeof(byte?[])) return ConvertArrayElements<byte?>(elements, name, fieldType);
+        if (targetType == typeof(sbyte?[])) return ConvertArrayElements<sbyte?>(elements, name, fieldType);
+        if (targetType == typeof(short?[])) return ConvertArrayElements<short?>(elements, name, fieldType);
+        if (targetType == typeof(ushort?[])) return ConvertArrayElements<ushort?>(elements, name, fieldType);
+        if (targetType == typeof(int?[])) return ConvertArrayElements<int?>(elements, name, fieldType);
+        if (targetType == typeof(uint?[])) return ConvertArrayElements<uint?>(elements, name, fieldType);
+        if (targetType == typeof(long?[])) return ConvertArrayElements<long?>(elements, name, fieldType);
+        if (targetType == typeof(ulong?[])) return ConvertArrayElements<ulong?>(elements, name, fieldType);
+        if (targetType == typeof(float?[])) return ConvertArrayElements<float?>(elements, name, fieldType);
+        if (targetType == typeof(double?[])) return ConvertArrayElements<double?>(elements, name, fieldType);
+        if (targetType == typeof(decimal?[])) return ConvertArrayElements<decimal?>(elements, name, fieldType);
+
+        if (targetType == typeof(DateOnly[])) return ConvertArrayElements<DateOnly>(elements, name, fieldType);
+        if (targetType == typeof(DateOnly?[])) return ConvertArrayElements<DateOnly?>(elements, name, fieldType);
+        if (targetType == typeof(TimeOnly[])) return ConvertArrayElements<TimeOnly>(elements, name, fieldType);
+        if (targetType == typeof(TimeOnly?[])) return ConvertArrayElements<TimeOnly?>(elements, name, fieldType);
+
+        throw WrongType(name, targetType.Name, elements);
+    }
+
+    private static T[] ConvertArrayElements<T>(
+        object?[] elements,
+        string name,
+        TpsFieldType? fieldType)
+    {
+        var converted = new T[elements.Length];
+        for (var index = 0; index < elements.Length; index++)
+        {
+            converted[index] = (T)ConvertValue(elements[index], typeof(T), name, fieldType)!;
+        }
+
+        return converted;
     }
 
     private static object ConvertNumeric(object value, Type targetType)

@@ -11,7 +11,7 @@ provided.
 ## Library usage
 
 ```powershell
-dotnet add package TpsReader --version 0.3.0
+dotnet add package TpsReader --version 0.3.1
 ```
 
 ### Basic usage
@@ -131,7 +131,7 @@ data page is discarded atomically; no partial record from that page is returned.
 Install the tool package while keeping the short `tps` command:
 
 ```powershell
-dotnet tool install --global TpsReader.Tool --version 0.3.0
+dotnet tool install --global TpsReader.Tool --version 0.3.1
 tps --help
 ```
 

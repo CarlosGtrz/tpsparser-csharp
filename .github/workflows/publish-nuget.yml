@@ -61,7 +61,7 @@ jobs:
           dotnet pack src/TpsReader.Tool/TpsReader.Tool.csproj --configuration Release --no-build --output artifacts/packages -p:ContinuousIntegrationBuild=true -p:RepositoryCommit=${{ github.sha }}
 
       - name: Build Windows x64 native AOT executable
-        run: dotnet publish src/TpsReader.Tool/TpsReader.Tool.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishAot=true --output artifacts/aot/win-x64
+        run: dotnet publish src/TpsReader.Tool/TpsReader.Tool.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishAot=true -p:WarningsAsErrors=IL3050 --output artifacts/aot/win-x64
 
       - name: Smoke test native executable
         shell: pwsh

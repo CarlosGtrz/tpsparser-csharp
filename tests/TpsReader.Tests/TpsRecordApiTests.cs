@@ -79,6 +79,50 @@ public sealed class TpsRecordApiTests
     }
 
     [Fact]
+    public void Generic_array_access_supports_aot_safe_tps_value_types()
+    {
+        var date = new DateOnly(2026, 7, 22);
+        var time = new TimeOnly(9, 30, 15);
+        var record = CreateRecord(
+            new Dictionary<string, object?>
+            {
+                ["NUMBERS"] = new object?[] { 1, 2 },
+                ["NULLABLE_NUMBERS"] = new object?[] { 1, null, 3 },
+                ["DECIMALS"] = new object?[] { "1.25", null },
+                ["DATES"] = new object?[] { date, null },
+                ["TIMES"] = new object?[] { time, null },
+                ["STRINGS"] = new object?[] { "A", null }
+            },
+            new Dictionary<string, TpsFieldType>
+            {
+                ["NUMBERS"] = TpsFieldType.Long,
+                ["NULLABLE_NUMBERS"] = TpsFieldType.Long,
+                ["DECIMALS"] = TpsFieldType.Decimal,
+                ["DATES"] = TpsFieldType.Date,
+                ["TIMES"] = TpsFieldType.Time,
+                ["STRINGS"] = TpsFieldType.String
+            });
+
+        Assert.Equal([1, 2], record.Get<byte[]>("NUMBERS")!);
+        Assert.Equal([(sbyte)1, (sbyte)2], record.Get<sbyte[]>("NUMBERS")!);
+        Assert.Equal([(short)1, (short)2], record.Get<short[]>("NUMBERS")!);
+        Assert.Equal([(ushort)1, (ushort)2], record.Get<ushort[]>("NUMBERS")!);
+        Assert.Equal([1, 2], record.Get<int[]>("NUMBERS")!);
+        Assert.Equal([1u, 2u], record.Get<uint[]>("NUMBERS")!);
+        Assert.Equal([1L, 2L], record.Get<long[]>("NUMBERS")!);
+        Assert.Equal([1UL, 2UL], record.Get<ulong[]>("NUMBERS")!);
+        Assert.Equal([1f, 2f], record.Get<float[]>("NUMBERS")!);
+        Assert.Equal([1d, 2d], record.Get<double[]>("NUMBERS")!);
+        Assert.Equal([1m, 2m], record.Get<decimal[]>("NUMBERS")!);
+        Assert.Equal([1, null, 3], record.Get<int?[]>("NULLABLE_NUMBERS")!);
+        Assert.Equal([1.25m, null], record.Get<decimal?[]>("DECIMALS")!);
+        Assert.Equal([date, null], record.Get<DateOnly?[]>("DATES")!);
+        Assert.Equal([time, null], record.Get<TimeOnly?[]>("TIMES")!);
+        Assert.True(record.Get<string?[]>("STRINGS")!.SequenceEqual(["A", null]));
+        Assert.Equal([1, 2], record.Get<object?[]>("NUMBERS")!);
+    }
+
+    [Fact]
     public void TryGet_returns_false_for_access_and_conversion_failures_only()
     {
         var record = new TpsRecord(
