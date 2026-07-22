@@ -1,0 +1,120 @@
+name: Publish release
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: nuget-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Test, pack, and publish
+    runs-on: windows-latest
+    timeout-minutes: 20
+    environment: nuget
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Check out release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Verify release version
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $version = $env:RELEASE_TAG -replace '^v', ''
+          $coreVersion = dotnet msbuild src/TpsReader/TpsReader.csproj -getProperty:Version -nologo
+          $toolVersion = dotnet msbuild src/TpsReader.Tool/TpsReader.Tool.csproj -getProperty:Version -nologo
+
+          if ($version -ne $coreVersion -or $version -ne $toolVersion) {
+            throw "Release tag '$env:RELEASE_TAG' does not match package versions '$coreVersion' and '$toolVersion'."
+          }
+
+          "PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
+          "RELEASE_TAG=$env:RELEASE_TAG" >> $env:GITHUB_ENV
+
+      - name: Restore
+        run: dotnet restore TpsReader.sln
+
+      - name: Test
+        run: dotnet test TpsReader.sln --configuration Release --no-restore
+
+      - name: Pack
+        run: |
+          dotnet pack src/TpsReader/TpsReader.csproj --configuration Release --no-build --output artifacts/packages -p:ContinuousIntegrationBuild=true -p:RepositoryCommit=${{ github.sha }}
+          dotnet pack src/TpsReader.Tool/TpsReader.Tool.csproj --configuration Release --no-build --output artifacts/packages -p:ContinuousIntegrationBuild=true -p:RepositoryCommit=${{ github.sha }}
+
+      - name: Build Windows x64 native AOT executable
+        run: dotnet publish src/TpsReader.Tool/TpsReader.Tool.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishAot=true --output artifacts/aot/win-x64
+
+      - name: Smoke test native executable
+        shell: pwsh
+        run: |
+          $executable = 'artifacts/aot/win-x64/TpsReader.Tool.exe'
+
+          & $executable --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          & $executable schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUS
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Create Windows x64 release archive
+        shell: pwsh
+        run: |
+          $releaseDirectory = 'artifacts/release'
+          $assetName = "tps-$env:RELEASE_TAG-win-x64.zip"
+          $assetPath = Join-Path $releaseDirectory $assetName
+
+          New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
+          Copy-Item 'artifacts/aot/win-x64/TpsReader.Tool.exe' (Join-Path $releaseDirectory 'tps.exe')
+          Compress-Archive -LiteralPath (Join-Path $releaseDirectory 'tps.exe') -DestinationPath $assetPath
+
+          "RELEASE_ASSET=$assetPath" >> $env:GITHUB_ENV
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-artifacts-${{ env.PACKAGE_VERSION }}
+          path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+            artifacts/release/*.zip
+          if-no-files-found: error
+
+      - name: Log in to NuGet.org
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: CarlosGtrz
+
+      - name: Publish packages
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: |
+          $source = 'https://api.nuget.org/v3/index.json'
+
+          dotnet nuget push "artifacts/packages/TpsReader.$env:PACKAGE_VERSION.nupkg" --api-key $env:NUGET_API_KEY --source $source --skip-duplicate
+          dotnet nuget push "artifacts/packages/TpsReader.Tool.$env:PACKAGE_VERSION.nupkg" --api-key $env:NUGET_API_KEY --source $source --skip-duplicate
+
+      - name: Attach native executable to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload $env:RELEASE_TAG $env:RELEASE_ASSET --repo $env:GITHUB_REPOSITORY --clobber

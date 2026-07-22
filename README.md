@@ -1,142 +1,25 @@
-# TpsParser for C#
+# TpsReader for .NET
 
-`TpsParser` is a read-only C#/.NET parser for Clarion TopSpeed (`.TPS`) files. It exposes an idiomatic object model for tables, fields, records, MEMO values, and BLOB values, including encrypted files that require an owner/password.
+`TpsReader` is a simple, read-only .NET library for opening TopSpeed (`.TPS`)
+files and reading their tables and records. `TpsReader.Tool` supplies the `tps`
+command for schema discovery, filtering, JSON/JSONL output, and CSV export.
 
-## Install/build
+Both packages target .NET 9. Version 0.3.0 is a breaking rename from
+`TpsParser` and `TpsInspector`; no compatibility namespace or shim package is
+provided.
 
-The library targets `net9.0`.
-
-```powershell
-dotnet build TpsParser.sln -c Release
-dotnet test TpsParser.sln -c Release
-```
-
-## Command-line tool
-
-The read-only `tps` CLI is designed for both people and coding agents. It opens
-files with read/write sharing, so it can read a TPS file while a Clarion
-application has it open. Build and run it directly from the repository:
+## Library usage
 
 ```powershell
-dotnet run --project src\TpsInspector -c Release -- schema C:\data\CUSTOMER.TPS
+dotnet add package TpsReader --version 0.3.0
 ```
 
-Or create and install the .NET tool package:
+### Basic usage
 
-```powershell
-dotnet pack src\TpsInspector -c Release -o artifacts\packages
-dotnet tool install --global TpsParser.Tool --version 0.2.0 --add-source artifacts\packages
-tps --help
-```
-
-A self-contained Windows executable can be built without requiring .NET on the
-destination machine:
-
-```powershell
-dotnet publish src\TpsInspector -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
-```
-
-### Inspect and discover schema
-
-`inspect` reports human-readable counts and optionally scans directories.
-`schema` emits a stable JSON document with `formatVersion: 1` and all available
-tables, fields, MEMO/BLOB definitions, indexes, and record counts.
-
-```powershell
-tps inspect C:\data --recursive
-tps inspect C:\data\CUSTOMER.TPS --details
-tps schema C:\data\CUSTOMER.TPS
-tps schema C:\data\CUSTOMER.TPS --table CUS
-```
-
-The legacy path-first form remains supported:
-
-```powershell
-tps C:\data\CUSTOMER.TPS --details
-tps C:\data\CUSTOMER.TPS --csv
-```
-
-### Read and filter records
-
-`rows` writes JSON to stdout. It returns at most 100 records by default; use
-`--limit`, paging with `--skip`, or the explicit `--all` option. A table is
-selected automatically only when the file contains one table.
-
-```powershell
-tps rows CUSTOMER.TPS --table CUS --fields CUSTNUMBER,COMPANY --limit 20
-tps rows CUSTOMER.TPS --table CUS --where STATE eq AZ --where CUSTNUMBER ge 100
-tps rows CUSTOMER.TPS --table CUS --record 16 --format jsonl
-```
-
-Each JSON row contains `recordNumber` and a nested `values` object. JSON mode
-also reports matched/returned counts and whether more matches are available.
-JSONL emits one row per line and reports truncation on stderr.
-
-`--where` takes a field, an operator, and (except for the null operators) a
-value. Repeated predicates are combined with AND:
-
-| Value type | Operators |
-| --- | --- |
-| All scalar fields | `eq`, `ne`, `is-null`, `is-not-null` |
-| Number, DECIMAL, DATE, TIME | `lt`, `le`, `gt`, `ge` |
-| STRING, CSTRING, PSTRING, MEMO | `contains`, `starts-with`, `ends-with` |
-| GROUP | `eq`, `ne` with a `0x` hex value |
-| BLOB | `is-null`, `is-not-null` |
-
-Use `@recordNumber` as a numeric pseudo-field. Array predicates require a
-one-based element such as `PHONE[2]`. Text predicates are case-insensitive and
-fixed-width padding is ignored; add `--case-sensitive` for exact casing.
-DATE literals use `yyyy-MM-dd`; TIME accepts `HH:mm:ss`, `HH:mm:ss.f`, or
-`HH:mm:ss.ff`. DECIMAL values are compared without loss of precision.
-
-JSON preserves DECIMAL values as strings, dates/times as ISO text, GROUP values
-as `0x` hex, and BLOBs as byte length plus SHA-256 metadata. Use
-`--blob-mode base64` only when the complete BLOB is needed.
-
-### Export CSV
-
-`export` requires an output directory and supports the same projection and
-filter options as `rows`. Unlike `rows`, export has no default record limit.
-
-```powershell
-tps export CUSTOMER.TPS --output C:\export
-tps export CUSTOMER.TPS --table CUS --fields CUSTNUMBER,COMPANY --where STATE eq AZ --output C:\export
-```
-
-A single selected table produces `<file>.csv`; exporting every table from a
-multi-table file produces `<file>-<table>.csv`. Text MEMOs are CSV columns.
-BLOBs are separate `.blob` files referenced from their CSV column. Writes are
-atomic and existing export files are overwritten.
-
-### Encrypted and damaged files
-
-Use repeatable `--owner <password>` options for encrypted files. Prefer
-`--owner-env <variable>` in scripts and agent sessions so the secret is not
-placed in command history or process arguments:
-
-```powershell
-$env:TPS_OWNER = 'secret'
-tps rows encrypted.tps --owner-env TPS_OWNER --limit 10
-```
-
-Use `--ignore-errors` to recover readable pages from a damaged file. This can
-produce incomplete results and should be used only when partial recovery is
-intended.
-
-Exit codes are `0` for success, `1` for invalid arguments/path/query, and `2`
-for parsing or export failures. `schema` and `rows` keep errors on stderr so
-stdout remains valid JSON or JSONL; `export` writes exported file paths to stdout.
-
-## Migrating to 0.2.0
-
-The main loaded-file type was renamed from `TpsParser.TpsParser` to
-`TpsParser.TpsFile`. Replace calls to the old type with `TpsFile`; its `Open`,
-`TryOpen`, `Tables`, and `GetTable` behavior is unchanged.
-
-## Basic usage
+Open a file and iterate through its tables and records:
 
 ```csharp
-using TpsParser;
+using TpsReader;
 
 var file = TpsFile.Open(@"C:\data\CUSTOMER.TPS");
 
@@ -148,73 +31,217 @@ foreach (var table in file.Tables)
     {
         var customerNumber = record.GetInt32("CUS:CUSTNUMBER");
         var company = record.GetString("COMPANY");
+
+        Console.WriteLine($"{customerNumber}: {company}");
     }
 }
 ```
 
-## Encrypted files
+### LINQ filtering and projection
+
+`TpsTable.Records` is LINQ-ready, so consumers can use normal LINQ without a
+package-specific query API:
 
 ```csharp
-var file = TpsFile.Open(
+using TpsReader;
+
+var file = TpsFile.Open(@"C:\data\CUSTOMER.TPS");
+var customers = file.GetTable();
+
+var companies = customers.Records
+    .Where(record => record.GetString("STATE") == "AZ")
+    .Select(record => new
+    {
+        Number = record.Get<int>("CUSTNUMBER"),
+        Company = record.GetString("COMPANY")
+    })
+    .ToArray();
+```
+
+Use `GetTable(string)` for a case-insensitive table name or `GetTable(int)` for
+a table number. Parameterless `GetTable()` succeeds only when the file contains
+exactly one table.
+
+Records support an indexer, generic conversion, and familiar typed helpers:
+
+```csharp
+var record = customers.Records[0];
+
+var company = (string?)record["COMPANY"];
+var customerNumber = record.Get<int>("CUSTNUMBER");
+var phones = record.Get<string[]>("PHONES");
+
+if (record.TryGet<decimal>("BALANCE", out var balance))
+{
+    Console.WriteLine(balance);
+}
+```
+
+`GetValue`, the indexer, `Get<T>`, and `TryGet<T>` resolve ordinary fields,
+MEMOs, and BLOBs through the same case-insensitive name rules. Full schema names
+and unambiguous short names are accepted. BLOB and other byte-array results are
+defensive copies.
+
+Numeric `Get<T>` conversions are checked. A DECIMAL value converts exactly to
+`decimal` when it is representable; otherwise it remains available losslessly
+through `GetDecimalString`. Arbitrary strings are not parsed as numbers.
+Ordinary fixed-width STRING values have trailing NUL and space padding removed.
+
+### GROUP values
+
+GROUP fields default to a fixed-width string projection. Only schema-declared
+STRING, CSTRING, and PSTRING leaves are placed at their byte offsets; binary
+members and gaps become spaces. Internal and trailing spaces are preserved.
+
+```csharp
+string groupText = record.Get<string>("ADDRESS_GROUP")!;
+byte[] originalGroupBytes = record.Get<byte[]>("ADDRESS_GROUP")!;
+
+string[] groupArray = record.Get<string[]>("LINES")!;
+byte[][] originalArrayBytes = record.Get<byte[][]>("LINES")!;
+```
+
+GROUP width is measured in bytes. Array elements repeat the first element's
+child layout, including nested string leaves and string arrays. Raw byte results
+are cloned.
+
+### Other inputs and options
+
+`Open` and `TryOpen` accept a path, readable `Stream`, or complete `byte[]`.
+Streams are consumed from their current position and are never disposed or
+rewound by the library. Input arrays are treated as read-only.
+
+```csharp
+var encrypted = TpsFile.Open(
     @"C:\data\encrypted.tps",
     new TpsOpenOptions { Owner = "owner-password" });
+
+if (!TpsFile.TryOpen(tpsBytes, out var parsed, out var error))
+{
+    Console.Error.WriteLine(error!.Message);
+}
 ```
 
-## Stream and byte-array input
+Set `IgnoreErrors = true` only for intentional partial recovery. A malformed
+data page is discarded atomically; no partial record from that page is returned.
+`StringEncoding` controls schema names, string fields, GROUP text, and MEMO text.
 
-TPS data already held in memory can be parsed directly. The parser treats the
-array as read-only and does not retain or modify it, including for encrypted
-files:
+## Command-line tool
 
-```csharp
-var file = TpsFile.Open(tpsBytes);
+Install the tool package while keeping the short `tps` command:
+
+```powershell
+dotnet tool install --global TpsReader.Tool --version 0.3.0
+tps --help
 ```
 
-Use the stream overload when TPS data comes from a network response or another
-streaming source:
+Each [GitHub release](https://github.com/CarlosGtrz/TpsReader/releases) also
+includes `tps-v<version>-win-x64.zip`. It contains a self-contained native AOT
+`tps.exe` for 64-bit Windows and does not require a separate .NET installation.
 
-```csharp
-using var stream = new MemoryStream(tpsBytes);
-var file = TpsFile.Open(stream);
+Build or run it from this repository:
+
+```powershell
+dotnet build TpsReader.sln -c Release
+dotnet test TpsReader.sln -c Release
+dotnet run --project src\TpsReader.Tool -c Release -- schema C:\data\CUSTOMER.TPS
 ```
 
-The stream must be readable. Parsing starts at its current position and consumes
-through EOF, including for non-seekable streams. `TpsFile` never disposes or
-rewinds the supplied stream; ownership remains with the caller. The same contract
-applies to the `TpsFile.TryOpen(Stream, ...)` overload.
+To create local packages without publishing them:
 
-## Damaged files / partial recovery
-
-Set `IgnoreErrors` to discard unreadable pages and continue with later valid pages. For a truncated BLOB, it returns the available payload bytes after the BLOB length header. Records from a failed page are never returned partially.
-
-```csharp
-var file = TpsFile.Open(
-    @"C:\data\damaged.tps",
-    new TpsOpenOptions { IgnoreErrors = true });
+```powershell
+dotnet pack src\TpsReader -c Release -o artifacts\packages
+dotnet pack src\TpsReader.Tool -c Release -o artifacts\packages
 ```
 
-## API notes
+### Discover and read
 
-- `TpsFile.Open` throws `TpsParseException` when the file cannot be opened or parsed.
-- `TpsFile.TryOpen` returns a `TpsParseError` instead of throwing.
-- Both methods accept a file path, a readable `Stream`, or a complete `byte[]`.
-- Field lookups accept full field names like `CUS:CUSTNUMBER` and unambiguous short names like `CUSTNUMBER`. When a short name occurs more than once, use its table-qualified name.
-- BCD/DECIMAL values are preserved losslessly as strings through `GetDecimalString`; `TryGetDecimal` is available when the value fits .NET `decimal`.
-- `StringEncoding` applies to field values, MEMO text, and table/schema names.
-- TIME values preserve hours, minutes, seconds, and hundredths of a second.
-- `GetBlob` returns a new byte array each call.
-- The TPS parser remains read-only; CSV export is provided by the CLI and
-  never modifies the source TPS file.
+Inspect structure before requesting records:
+
+```powershell
+tps inspect C:\data --recursive
+tps schema C:\data\CUSTOMER.TPS
+tps schema C:\data\CUSTOMER.TPS --table CUS
+tps rows C:\data\CUSTOMER.TPS --table CUS --fields CUSTNUMBER,COMPANY --limit 20
+```
+
+`schema` and JSON row documents retain `formatVersion: 1`. `rows` returns at
+most 100 records by default; use `--limit`, `--skip`, or explicit `--all`.
+JSONL emits one versioned record per line.
+
+### CLI filters
+
+The library does not define a query model: application consumers use LINQ. The
+tool keeps its dynamic field selection and `--where` compiler internal.
+Repeated CLI predicates are combined with AND.
+
+| Value type | Operators |
+| --- | --- |
+| Number, DECIMAL, DATE, TIME | `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `is-null`, `is-not-null` |
+| STRING, CSTRING, PSTRING, GROUP, MEMO | `eq`, `ne`, `contains`, `starts-with`, `ends-with`, `is-null`, `is-not-null` |
+| BLOB | `is-null`, `is-not-null` |
+
+```powershell
+tps rows CUSTOMER.TPS --where STATE eq AZ --where CUSTNUMBER ge 100
+tps rows DATA.TPS --where CONTACT_GROUP contains Smith
+tps rows DATA.TPS --where GROUP_ARRAY[2] starts-with West
+```
+
+Use `@recordNumber` as a numeric pseudo-field. Array selectors are one-based.
+Text matching is case-insensitive unless `--case-sensitive` is supplied. GROUP
+operators ignore trailing NUL/space padding while preserving internal spacing.
+DATE literals use `yyyy-MM-dd`; TIME accepts `HH:mm:ss`, `HH:mm:ss.f`, or
+`HH:mm:ss.ff`. DECIMAL comparisons remain lossless.
+
+JSON and JSONL emit GROUP projections as full fixed-width strings. DECIMAL
+values remain strings, dates and times use ISO text, and BLOBs default to length
+plus SHA-256 metadata. Add `--blob-mode base64` when complete BLOB content is
+required.
+
+### CSV export
+
+```powershell
+tps export CUSTOMER.TPS --output C:\export
+tps export CUSTOMER.TPS --fields CUSTNUMBER,COMPANY --where STATE eq AZ --output C:\export
+```
+
+GROUP cells are always quoted and preserve their full width, including internal
+and trailing spaces. Text MEMOs are columns. BLOBs are separate `.blob` files
+referenced by their CSV cells. Writes are atomic and overwrite existing export
+files; source TPS files are never modified.
+
+### Encrypted and damaged files
+
+Prefer an environment variable over placing an owner value in command history:
+
+```powershell
+$env:TPS_OWNER = 'secret'
+tps rows encrypted.tps --owner-env TPS_OWNER --limit 10
+```
+
+Use `--ignore-errors` only when incomplete recovery is acceptable. Exit codes
+are `0` for success, `1` for invalid path/arguments/query, and `2` for parsing or
+export failures. Structured commands keep diagnostics on stderr.
+
+## Migrating to 0.3.0
+
+- Replace the `TpsParser` package, project, assembly, and namespace with
+  `TpsReader`.
+- Replace `TpsInspector` with `TpsReader.Tool`; the executable command remains
+  `tps`.
+- Keep existing `TpsFile`, `TpsTable`, `TpsRecord`, and other `Tps*` class names.
+- Ordinary fixed-width STRING values are now returned without trailing padding.
+- GROUP values now default to fixed-width text rather than raw bytes or JSON hex.
+  Request `byte[]` or `byte[][]` explicitly when raw GROUP storage is needed.
+- CLI JSON keeps `formatVersion: 1` despite the deliberate GROUP row-value
+  semantic change.
 
 ## Attribution and license
 
-This parser adapts logic from the original Java project `ctrl-alt-dev/tps-parse`.
+This parser adapts logic from
+[`ctrl-alt-dev/tps-parse`](https://github.com/ctrl-alt-dev/tps-parse), copyright
+2012-2021 Erik Hooijmeijer, under the Apache License 2.0. See
+[`Apache-2.0.txt`](Apache-2.0.txt).
 
-- Project: `ctrl-alt-dev/tps-parse`
-- URL: https://github.com/ctrl-alt-dev/tps-parse
-- Author / copyright: (C) 2012-2021 E. Hooijmeijer / Erik Hooijmeijer
-- Organization / site: ctrl-alt-dev, http://www.ctrl-alt-dev.nl/
-- License: Apache License 2.0
-- Local license copy: `Apache-2.0.txt`
-
-The original project describes itself as reverse-engineered TPS parsing software. TPS parsing may be incomplete and may misinterpret data; verify output before relying on it.
+TPS parsing is based on reverse engineering and may be incomplete. Verify
+output before relying on it for critical work.
