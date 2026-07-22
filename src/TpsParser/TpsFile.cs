@@ -3,11 +3,11 @@ using TpsParser.Internal;
 
 namespace TpsParser;
 
-public sealed class TpsParser
+public sealed class TpsFile
 {
     private readonly Dictionary<int, TpsTable> _tablesByNumber;
 
-    private TpsParser(IReadOnlyList<TpsTable> tables)
+    private TpsFile(IReadOnlyList<TpsTable> tables)
     {
         Tables = tables;
         _tablesByNumber = tables.ToDictionary(table => table.TableNumber);
@@ -15,7 +15,7 @@ public sealed class TpsParser
 
     public IReadOnlyList<TpsTable> Tables { get; }
 
-    public static TpsParser Open(string path, TpsOpenOptions? options = null)
+    public static TpsFile Open(string path, TpsOpenOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         options ??= new TpsOpenOptions();
@@ -23,8 +23,8 @@ public sealed class TpsParser
 
         try
         {
-            var file = OpenInternalFile(path, options);
-            var contents = file.Parse(options.IgnoreErrors);
+            var reader = OpenReader(path, options);
+            var contents = reader.Parse(options.IgnoreErrors);
             if (contents.TableDefinitions.Count == 0)
             {
                 throw new TpsParseException(new TpsParseError("No table definitions were found in the TPS file.", path));
@@ -33,7 +33,7 @@ public sealed class TpsParser
             var tables = contents.TableDefinitions
                 .Select(table => BuildTable(table.Key, table.Value, contents, options))
                 .ToArray();
-            return new TpsParser(tables);
+            return new TpsFile(tables);
         }
         catch (TpsParseException)
         {
@@ -47,19 +47,19 @@ public sealed class TpsParser
 
     public static bool TryOpen(
         string path,
-        out TpsParser? parser,
+        out TpsFile? file,
         out TpsParseError? error,
         TpsOpenOptions? options = null)
     {
         try
         {
-            parser = Open(path, options);
+            file = Open(path, options);
             error = null;
             return true;
         }
         catch (TpsParseException ex)
         {
-            parser = null;
+            file = null;
             error = ex.Error;
             return false;
         }
@@ -75,22 +75,22 @@ public sealed class TpsParser
         throw new TpsParseException(new TpsParseError($"Table {tableNumber} was not found."));
     }
 
-    private static TpsFile OpenInternalFile(string path, TpsOpenOptions options)
+    private static TpsFileReader OpenReader(string path, TpsOpenOptions options)
     {
         if (string.IsNullOrEmpty(options.Owner))
         {
-            return new TpsFile(path, options.StringEncoding);
+            return new TpsFileReader(path, options.StringEncoding);
         }
 
         try
         {
-            var unencryptedFile = new TpsFile(path, options.StringEncoding);
+            var unencryptedFile = new TpsFileReader(path, options.StringEncoding);
             _ = unencryptedFile.GetHeader();
             return unencryptedFile;
         }
         catch (InvalidDataException)
         {
-            return new TpsFile(path, options.Owner, options.StringEncoding, options.IgnoreErrors);
+            return new TpsFileReader(path, options.Owner, options.StringEncoding, options.IgnoreErrors);
         }
     }
 

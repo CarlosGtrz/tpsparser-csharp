@@ -1,7 +1,6 @@
 using System.Text;
 using System.Globalization;
 using TpsParser;
-using Parser = TpsParser.TpsParser;
 
 namespace TpsInspector;
 
@@ -10,6 +9,27 @@ internal static class InspectorApplication
     private const int MaximumSampleLength = 50;
 
     public static int Run(string[] arguments, TextWriter output, TextWriter errorOutput)
+    {
+        if (arguments.Length == 0 ||
+            (arguments.Length == 1 &&
+             (arguments[0].Equals("-h", StringComparison.OrdinalIgnoreCase) ||
+              arguments[0].Equals("--help", StringComparison.OrdinalIgnoreCase))))
+        {
+            PrintGeneralUsage(output);
+            return 0;
+        }
+
+        return arguments[0].ToUpperInvariant() switch
+        {
+            "INSPECT" => RunInspect(arguments[1..], output, errorOutput),
+            "SCHEMA" => StructuredCommands.RunSchema(arguments[1..], output, errorOutput),
+            "ROWS" => StructuredCommands.RunRows(arguments[1..], output, errorOutput),
+            "EXPORT" => StructuredCommands.RunExport(arguments[1..], output, errorOutput),
+            _ => RunInspect(arguments, output, errorOutput)
+        };
+    }
+
+    private static int RunInspect(string[] arguments, TextWriter output, TextWriter errorOutput)
     {
         var parseResult = CommandLineOptions.Parse(arguments);
         if (parseResult.ShowHelp)
@@ -66,7 +86,7 @@ internal static class InspectorApplication
 
         foreach (var file in files)
         {
-            if (!TryOpenWithOwners(file, options, out var parser, out var parseError))
+            if (!TryOpenWithOwners(file, options, out var tpsFile, out var parseError))
             {
                 failed++;
                 output.WriteLine($"ERROR  {file}");
@@ -78,7 +98,7 @@ internal static class InspectorApplication
             {
                 try
                 {
-                    CsvExporter.Export(file, parser!.Tables);
+                    CsvExporter.Export(file, tpsFile!.Tables);
                 }
                 catch (IOException ex)
                 {
@@ -97,10 +117,10 @@ internal static class InspectorApplication
             }
 
             succeeded++;
-            var tableCount = parser!.Tables.Count;
-            var recordCount = parser.Tables.Sum(table => (long)table.Records.Count);
-            var fieldCount = parser.Tables.Sum(table => table.Fields.Count);
-            var memoCount = parser.Tables.Sum(table => table.Memos.Count);
+            var tableCount = tpsFile!.Tables.Count;
+            var recordCount = tpsFile.Tables.Sum(table => (long)table.Records.Count);
+            var fieldCount = tpsFile.Tables.Sum(table => table.Fields.Count);
+            var memoCount = tpsFile.Tables.Sum(table => table.Memos.Count);
             totalTables += tableCount;
             totalRecords += recordCount;
 
@@ -110,7 +130,7 @@ internal static class InspectorApplication
 
             if (options.Details)
             {
-                PrintDetails(parser, output);
+                PrintDetails(tpsFile, output);
             }
         }
 
@@ -121,9 +141,9 @@ internal static class InspectorApplication
         return failed == 0 ? 0 : 2;
     }
 
-    private static void PrintDetails(Parser parser, TextWriter output)
+    private static void PrintDetails(TpsFile file, TextWriter output)
     {
-        foreach (var table in parser.Tables)
+        foreach (var table in file.Tables)
         {
             output.WriteLine(
                 $"       Table #{table.TableNumber} {table.Name}: " +
@@ -200,9 +220,9 @@ internal static class InspectorApplication
     }
 
     private static bool TryOpenWithOwners(
-        string file,
+        string path,
         CommandLineOptions options,
-        out Parser? parser,
+        out TpsFile? file,
         out TpsParseError? error)
     {
         IEnumerable<string?> ownerCandidates = options.Owners.Count == 0
@@ -211,7 +231,7 @@ internal static class InspectorApplication
         var windows1252 = CodePagesEncodingProvider.Instance.GetEncoding(1252)
             ?? throw new InvalidOperationException("Code page 1252 is unavailable.");
 
-        parser = null;
+        file = null;
         error = null;
         foreach (var owner in ownerCandidates)
         {
@@ -222,7 +242,7 @@ internal static class InspectorApplication
                 StringEncoding = windows1252
             };
 
-            if (Parser.TryOpen(file, out parser, out error, openOptions))
+            if (TpsFile.TryOpen(path, out file, out error, openOptions))
             {
                 return true;
             }
@@ -242,11 +262,27 @@ internal static class InspectorApplication
         output.WriteLine("  --recursive       Search subdirectories for TPS files.");
         output.WriteLine("  --ignore-errors   Skip damaged pages and recover readable data.");
         output.WriteLine("  --owner <key>     Owner key for encrypted files; may be repeated.");
+        output.WriteLine("  --owner-env <var> Read an owner key from an environment variable; may be repeated.");
         output.WriteLine("  --details         Show tables, field definitions, and first-record sample values.");
         output.WriteLine("  --csv             Export every table and record to CSV files beside each TPS file.");
         output.WriteLine("  -h, --help        Show this help.");
         output.WriteLine();
         output.WriteLine("Exit codes: 0=success, 1=invalid usage/path, 2=one or more TPS files failed.");
+    }
+
+    private static void PrintGeneralUsage(TextWriter output)
+    {
+        output.WriteLine("tps - read-only Clarion TopSpeed file CLI");
+        output.WriteLine();
+        output.WriteLine("Usage:");
+        output.WriteLine("  tps inspect <file-or-directory> [options]");
+        output.WriteLine("  tps schema <file> [--table <name-or-number>] [options]");
+        output.WriteLine("  tps rows <file> [query-options]");
+        output.WriteLine("  tps export <file> --output <directory> [query-options]");
+        output.WriteLine();
+        output.WriteLine("Run 'tps <command> --help' for command details.");
+        output.WriteLine("Legacy 'TpsInspector <file-or-directory> [options]' invocation remains supported.");
+        output.WriteLine("Search subdirectories with inspect --recursive; export beside a source with legacy --csv.");
     }
 
     private sealed record CommandLineOptions(
@@ -298,6 +334,23 @@ internal static class InspectorApplication
                         }
 
                         owners.Add(arguments[i]);
+                        break;
+                    case "--OWNER-ENV":
+                        if (++i >= arguments.Length)
+                        {
+                            return new CommandLineParseResult(null, "Missing environment variable after --owner-env.", false);
+                        }
+
+                        var owner = Environment.GetEnvironmentVariable(arguments[i]);
+                        if (string.IsNullOrEmpty(owner))
+                        {
+                            return new CommandLineParseResult(
+                                null,
+                                $"Environment variable '{arguments[i]}' is missing or empty.",
+                                false);
+                        }
+
+                        owners.Add(owner);
                         break;
                     default:
                         if (argument.StartsWith('-'))

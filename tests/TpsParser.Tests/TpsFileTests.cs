@@ -1,15 +1,13 @@
-using Parser = TpsParser.TpsParser;
-
 namespace TpsParser.Tests;
 
-public sealed class TpsParserTests
+public sealed class TpsFileTests
 {
     [Fact]
     public void CustomerFile_opens_with_expected_metadata_and_records()
     {
-        var parser = Parser.Open(Fixture("CUSTOMER.TPS"));
+        var file = TpsFile.Open(Fixture("CUSTOMER.TPS"));
 
-        var table = Assert.Single(parser.Tables);
+        var table = Assert.Single(file.Tables);
         Assert.Equal(14, table.TableNumber);
         Assert.Equal("CUS", table.Name);
         Assert.Equal(8, table.Fields.Count);
@@ -26,9 +24,9 @@ public sealed class TpsParserTests
     [Fact]
     public void OrdersFile_preserves_bcd_decimal_as_string()
     {
-        var parser = Parser.Open(Fixture("ORDERS.TPS"));
+        var file = TpsFile.Open(Fixture("ORDERS.TPS"));
 
-        var table = Assert.Single(parser.Tables);
+        var table = Assert.Single(file.Tables);
         Assert.Equal(1, table.TableNumber);
         Assert.Equal(5, table.Fields.Count);
         Assert.Equal(2, table.Records.Count);
@@ -44,10 +42,10 @@ public sealed class TpsParserTests
     [Fact]
     public void EncryptedFile_requires_owner_and_opens_with_owner()
     {
-        Assert.Throws<TpsParseException>(() => Parser.Open(Fixture("encrypted-a.tps")));
+        Assert.Throws<TpsParseException>(() => TpsFile.Open(Fixture("encrypted-a.tps")));
 
-        var parser = Parser.Open(Fixture("encrypted-a.tps"), new TpsOpenOptions { Owner = "a" });
-        var table = Assert.Single(parser.Tables);
+        var file = TpsFile.Open(Fixture("encrypted-a.tps"), new TpsOpenOptions { Owner = "a" });
+        var table = Assert.Single(file.Tables);
         Assert.Equal(2, table.TableNumber);
         Assert.Equal(4, table.Fields.Count);
         Assert.Equal(17, table.Records.Count);
@@ -56,10 +54,10 @@ public sealed class TpsParserTests
     [Fact]
     public void TryOpen_returns_error_instead_of_throwing()
     {
-        var ok = Parser.TryOpen(Fixture("encrypted-a.tps"), out var parser, out var error);
+        var ok = TpsFile.TryOpen(Fixture("encrypted-a.tps"), out var file, out var error);
 
         Assert.False(ok);
-        Assert.Null(parser);
+        Assert.Null(file);
         Assert.NotNull(error);
         Assert.Contains("Could not open or parse TPS file", error.Message);
     }
@@ -67,11 +65,11 @@ public sealed class TpsParserTests
     [Fact]
     public void Field_and_navigation_errors_are_exposed_as_tps_parse_exceptions()
     {
-        var parser = Parser.Open(Fixture("CUSTOMER.TPS"));
-        var table = parser.GetTable(14);
+        var file = TpsFile.Open(Fixture("CUSTOMER.TPS"));
+        var table = file.GetTable(14);
         var record = table.GetRecord(16);
 
-        Assert.Throws<TpsParseException>(() => parser.GetTable(999));
+        Assert.Throws<TpsParseException>(() => file.GetTable(999));
         Assert.Throws<TpsParseException>(() => table.GetRecord(999));
         Assert.Throws<TpsParseException>(() => record.GetValue("DOES_NOT_EXIST"));
         Assert.Throws<TpsParseException>(() => record.GetInt32("FIRSTNAME"));
@@ -84,7 +82,7 @@ public sealed class TpsParserTests
         try
         {
             File.WriteAllText(path, "not a topspeed file");
-            Assert.Throws<TpsParseException>(() => Parser.Open(path));
+            Assert.Throws<TpsParseException>(() => TpsFile.Open(path));
         }
         finally
         {
@@ -106,10 +104,10 @@ public sealed class TpsParserTests
                 FileAccess.ReadWrite,
                 FileShare.ReadWrite);
 
-            var parser = Parser.Open(path);
+            var file = TpsFile.Open(path);
 
-            Assert.Single(parser.Tables);
-            Assert.Equal(7, parser.Tables[0].Records.Count);
+            Assert.Single(file.Tables);
+            Assert.Equal(7, file.Tables[0].Records.Count);
         }
         finally
         {

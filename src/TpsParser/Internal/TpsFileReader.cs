@@ -2,17 +2,17 @@ using System.Text;
 
 namespace TpsParser.Internal;
 
-internal sealed class TpsFile
+internal sealed class TpsFileReader
 {
     private readonly TpsBinaryReader _reader;
     private readonly Encoding _textEncoding;
 
-    public TpsFile(string path, Encoding textEncoding)
+    public TpsFileReader(string path, Encoding textEncoding)
         : this(ReadAllBytesShared(path), textEncoding)
     {
     }
 
-    public TpsFile(string path, string owner, Encoding textEncoding, bool ignoreErrors)
+    public TpsFileReader(string path, string owner, Encoding textEncoding, bool ignoreErrors)
     {
         var data = ReadAllBytesShared(path);
         var key = new TpsEncryptionKey(owner);
@@ -45,7 +45,7 @@ internal sealed class TpsFile
         }
     }
 
-    private TpsFile(byte[] data, Encoding textEncoding)
+    private TpsFileReader(byte[] data, Encoding textEncoding)
     {
         _reader = new TpsBinaryReader(data);
         _textEncoding = textEncoding;

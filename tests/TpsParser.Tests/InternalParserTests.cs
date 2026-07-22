@@ -88,8 +88,8 @@ public sealed class InternalParserTests
         ]));
 
         Assert.Throws<InvalidDataException>(() =>
-            TpsFile.TryReadPage(page, Encoding.Latin1, ignoreErrors: false, out _));
-        Assert.False(TpsFile.TryReadPage(page, Encoding.Latin1, ignoreErrors: true, out var records));
+            TpsFileReader.TryReadPage(page, Encoding.Latin1, ignoreErrors: false, out _));
+        Assert.False(TpsFileReader.TryReadPage(page, Encoding.Latin1, ignoreErrors: true, out var records));
         Assert.Empty(records);
     }
 

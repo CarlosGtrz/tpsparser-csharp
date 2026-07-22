@@ -16,6 +16,21 @@ internal static class CsvExporter
         var fullSourcePath = Path.GetFullPath(sourcePath);
         var directory = Path.GetDirectoryName(fullSourcePath)
             ?? throw new ArgumentException("The TPS source path does not have a parent directory.", nameof(sourcePath));
+        return Export(fullSourcePath, directory, tables);
+    }
+
+    public static IReadOnlyList<string> Export(
+        string sourcePath,
+        string outputDirectory,
+        IReadOnlyList<TpsTable> tables)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        ArgumentNullException.ThrowIfNull(tables);
+
+        var fullSourcePath = Path.GetFullPath(sourcePath);
+        var fullOutputDirectory = Path.GetFullPath(outputDirectory);
+        Directory.CreateDirectory(fullOutputDirectory);
         var sourceStem = Path.GetFileNameWithoutExtension(fullSourcePath);
         var csvStems = CreateCsvStems(sourceStem, tables);
         var exportedPaths = new List<string>(tables.Count);
@@ -24,12 +39,38 @@ internal static class CsvExporter
         {
             var table = tables[tableIndex];
             var csvStem = csvStems[tableIndex];
-            var csvPath = Path.Combine(directory, $"{csvStem}.csv");
-            ExportTable(directory, csvStem, csvPath, table);
+            var csvPath = Path.Combine(fullOutputDirectory, $"{csvStem}.csv");
+            var columns = table.Fields.Select(SelectedColumn.ForField)
+                .Concat(table.Memos.Select(SelectedColumn.ForMemo))
+                .ToArray();
+            ExportTable(fullOutputDirectory, csvStem, csvPath, table, table.Records, columns);
             exportedPaths.Add(csvPath);
         }
 
         return exportedPaths;
+    }
+
+    public static IReadOnlyList<string> Export(
+        string sourcePath,
+        string outputDirectory,
+        QueryResult query)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        ArgumentNullException.ThrowIfNull(query);
+
+        var fullOutputDirectory = Path.GetFullPath(outputDirectory);
+        Directory.CreateDirectory(fullOutputDirectory);
+        var csvStem = Path.GetFileNameWithoutExtension(Path.GetFullPath(sourcePath));
+        var csvPath = Path.Combine(fullOutputDirectory, $"{csvStem}.csv");
+        ExportTable(
+            fullOutputDirectory,
+            csvStem,
+            csvPath,
+            query.Table,
+            query.Records,
+            query.Columns);
+        return [csvPath];
     }
 
     private static string[] CreateCsvStems(string sourceStem, IReadOnlyList<TpsTable> tables)
@@ -54,7 +95,13 @@ internal static class CsvExporter
         return stems;
     }
 
-    private static void ExportTable(string directory, string csvStem, string csvPath, TpsTable table)
+    private static void ExportTable(
+        string directory,
+        string csvStem,
+        string csvPath,
+        TpsTable table,
+        IReadOnlyList<TpsRecord> records,
+        IReadOnlyList<SelectedColumn> columns)
     {
         var blobTokens = CreateBlobTokens(table.Memos);
         WriteAtomic(csvPath, stream =>
@@ -64,41 +111,47 @@ internal static class CsvExporter
                 NewLine = "\r\n"
             };
 
-            WriteRow(writer, CreateHeaders(table));
-            foreach (var record in table.Records)
+            WriteRow(writer, CreateHeaders(columns));
+            foreach (var record in records)
             {
-                WriteRow(writer, CreateRow(directory, csvStem, table, record, blobTokens));
+                WriteRow(writer, CreateRow(directory, csvStem, record, columns, blobTokens));
             }
         });
     }
 
-    private static IReadOnlyList<string> CreateHeaders(TpsTable table)
+    private static IReadOnlyList<string> CreateHeaders(IReadOnlyList<SelectedColumn> columns)
     {
         var headers = new List<string> { "RecordNumber" };
-        foreach (var field in table.Fields)
+        foreach (var column in columns)
         {
-            if (field.IsArray)
+            if (column.Field is { } field)
             {
-                for (var elementIndex = 0; elementIndex < field.ElementCount; elementIndex++)
+                if (field.IsArray)
                 {
-                    headers.Add($"{field.Name}[{elementIndex + 1}]");
+                    for (var elementIndex = 0; elementIndex < field.ElementCount; elementIndex++)
+                    {
+                        headers.Add($"{field.Name}[{elementIndex + 1}]");
+                    }
                 }
+                else
+                {
+                    headers.Add(field.Name);
+                }
+
+                continue;
             }
-            else
-            {
-                headers.Add(field.Name);
-            }
+
+            headers.Add(column.Memo!.ShortName.ToLowerInvariant());
         }
 
-        headers.AddRange(table.Memos.Select(memo => memo.ShortName.ToLowerInvariant()));
         return headers;
     }
 
     private static IReadOnlyList<string> CreateRow(
         string directory,
         string csvStem,
-        TpsTable table,
         TpsRecord record,
+        IReadOnlyList<SelectedColumn> columns,
         IReadOnlyDictionary<int, string> blobTokens)
     {
         var values = new List<string>
@@ -106,29 +159,32 @@ internal static class CsvExporter
             record.RecordNumber.ToString(CultureInfo.InvariantCulture)
         };
 
-        foreach (var field in table.Fields)
+        foreach (var column in columns)
         {
-            var value = record.GetValue(field.Name);
-            if (field.IsArray)
+            if (column.Field is { } field)
             {
-                var elements = value as object?[]
-                    ?? throw new InvalidDataException($"Array field '{field.Name}' did not contain an array value.");
-                if (elements.Length != field.ElementCount)
+                var value = record.GetValue(field.Name);
+                if (field.IsArray)
                 {
-                    throw new InvalidDataException(
-                        $"Array field '{field.Name}' declares {field.ElementCount} elements but contains {elements.Length}.");
+                    var elements = value as object?[]
+                        ?? throw new InvalidDataException($"Array field '{field.Name}' did not contain an array value.");
+                    if (elements.Length != field.ElementCount)
+                    {
+                        throw new InvalidDataException(
+                            $"Array field '{field.Name}' declares {field.ElementCount} elements but contains {elements.Length}.");
+                    }
+
+                    values.AddRange(elements.Select(FormatFieldValue));
+                }
+                else
+                {
+                    values.Add(FormatFieldValue(value));
                 }
 
-                values.AddRange(elements.Select(FormatFieldValue));
+                continue;
             }
-            else
-            {
-                values.Add(FormatFieldValue(value));
-            }
-        }
 
-        foreach (var memo in table.Memos)
-        {
+            var memo = column.Memo!;
             if (memo.IsMemo)
             {
                 values.Add(record.GetMemo(memo.Name) ?? string.Empty);

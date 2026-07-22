@@ -11,39 +11,136 @@ dotnet build TpsParser.sln -c Release
 dotnet test TpsParser.sln -c Release
 ```
 
-## Command-line inspector
+## Command-line tool
 
-`TpsInspector` opens one TPS file or scans all TPS files in a directory without
-modifying them. It reports table, field, record, and MEMO/BLOB counts.
-Files are opened with read/write sharing so the inspector can read TPS files
-that are currently open by a Clarion application.
+The read-only `tps` CLI is designed for both people and coding agents. It opens
+files with read/write sharing, so it can read a TPS file while a Clarion
+application has it open. Build and run it directly from the repository:
 
 ```powershell
-dotnet run --project src\TpsInspector -c Release -- C:\data
-dotnet run --project src\TpsInspector -c Release -- C:\data\CUSTOMER.TPS --details
-dotnet run --project src\TpsInspector -c Release -- C:\data\CUSTOMER.TPS --csv
+dotnet run --project src\TpsInspector -c Release -- schema C:\data\CUSTOMER.TPS
 ```
 
-Use `--recursive` to include subdirectories, `--owner <password>` for encrypted
-files, or `--ignore-errors` to attempt partial recovery from damaged pages.
-`--owner` can be repeated when a directory contains files with different keys.
+Or create and install the .NET tool package:
 
-Use `--csv` to export every record beside the TPS file. A single-table TPS file
-produces `<file>.csv`; a multi-table TPS file produces one
-`<file>-<table>.csv` per table. Text MEMOs are included as CSV columns, while
-BLOB values are written to separate `.blob` files and referenced by filename
-from their CSV columns. MEMO and BLOB column headers use the unqualified,
-lowercase field name, which is also used in the corresponding `.blob` filename.
-Empty all-zero group values are left blank. Existing export files are overwritten.
+```powershell
+dotnet pack src\TpsInspector -c Release -o artifacts\packages
+dotnet tool install --global TpsParser.Tool --version 0.2.0 --add-source artifacts\packages
+tps --help
+```
+
+A self-contained Windows executable can be built without requiring .NET on the
+destination machine:
+
+```powershell
+dotnet publish src\TpsInspector -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+```
+
+### Inspect and discover schema
+
+`inspect` reports human-readable counts and optionally scans directories.
+`schema` emits a stable JSON document with `formatVersion: 1` and all available
+tables, fields, MEMO/BLOB definitions, indexes, and record counts.
+
+```powershell
+tps inspect C:\data --recursive
+tps inspect C:\data\CUSTOMER.TPS --details
+tps schema C:\data\CUSTOMER.TPS
+tps schema C:\data\CUSTOMER.TPS --table CUS
+```
+
+The legacy path-first form remains supported:
+
+```powershell
+tps C:\data\CUSTOMER.TPS --details
+tps C:\data\CUSTOMER.TPS --csv
+```
+
+### Read and filter records
+
+`rows` writes JSON to stdout. It returns at most 100 records by default; use
+`--limit`, paging with `--skip`, or the explicit `--all` option. A table is
+selected automatically only when the file contains one table.
+
+```powershell
+tps rows CUSTOMER.TPS --table CUS --fields CUSTNUMBER,COMPANY --limit 20
+tps rows CUSTOMER.TPS --table CUS --where STATE eq AZ --where CUSTNUMBER ge 100
+tps rows CUSTOMER.TPS --table CUS --record 16 --format jsonl
+```
+
+Each JSON row contains `recordNumber` and a nested `values` object. JSON mode
+also reports matched/returned counts and whether more matches are available.
+JSONL emits one row per line and reports truncation on stderr.
+
+`--where` takes a field, an operator, and (except for the null operators) a
+value. Repeated predicates are combined with AND:
+
+| Value type | Operators |
+| --- | --- |
+| All scalar fields | `eq`, `ne`, `is-null`, `is-not-null` |
+| Number, DECIMAL, DATE, TIME | `lt`, `le`, `gt`, `ge` |
+| STRING, CSTRING, PSTRING, MEMO | `contains`, `starts-with`, `ends-with` |
+| GROUP | `eq`, `ne` with a `0x` hex value |
+| BLOB | `is-null`, `is-not-null` |
+
+Use `@recordNumber` as a numeric pseudo-field. Array predicates require a
+one-based element such as `PHONE[2]`. Text predicates are case-insensitive and
+fixed-width padding is ignored; add `--case-sensitive` for exact casing.
+DATE literals use `yyyy-MM-dd`; TIME accepts `HH:mm:ss`, `HH:mm:ss.f`, or
+`HH:mm:ss.ff`. DECIMAL values are compared without loss of precision.
+
+JSON preserves DECIMAL values as strings, dates/times as ISO text, GROUP values
+as `0x` hex, and BLOBs as byte length plus SHA-256 metadata. Use
+`--blob-mode base64` only when the complete BLOB is needed.
+
+### Export CSV
+
+`export` requires an output directory and supports the same projection and
+filter options as `rows`. Unlike `rows`, export has no default record limit.
+
+```powershell
+tps export CUSTOMER.TPS --output C:\export
+tps export CUSTOMER.TPS --table CUS --fields CUSTNUMBER,COMPANY --where STATE eq AZ --output C:\export
+```
+
+A single selected table produces `<file>.csv`; exporting every table from a
+multi-table file produces `<file>-<table>.csv`. Text MEMOs are CSV columns.
+BLOBs are separate `.blob` files referenced from their CSV column. Writes are
+atomic and existing export files are overwritten.
+
+### Encrypted and damaged files
+
+Use repeatable `--owner <password>` options for encrypted files. Prefer
+`--owner-env <variable>` in scripts and agent sessions so the secret is not
+placed in command history or process arguments:
+
+```powershell
+$env:TPS_OWNER = 'secret'
+tps rows encrypted.tps --owner-env TPS_OWNER --limit 10
+```
+
+Use `--ignore-errors` to recover readable pages from a damaged file. This can
+produce incomplete results and should be used only when partial recovery is
+intended.
+
+Exit codes are `0` for success, `1` for invalid arguments/path/query, and `2`
+for parsing or export failures. `schema` and `rows` keep errors on stderr so
+stdout remains valid JSON or JSONL; `export` writes exported file paths to stdout.
+
+## Migrating to 0.2.0
+
+The main loaded-file type was renamed from `TpsParser.TpsParser` to
+`TpsParser.TpsFile`. Replace calls to the old type with `TpsFile`; its `Open`,
+`TryOpen`, `Tables`, and `GetTable` behavior is unchanged.
 
 ## Basic usage
 
 ```csharp
 using TpsParser;
 
-var parser = TpsParser.TpsParser.Open(@"C:\data\CUSTOMER.TPS");
+var file = TpsFile.Open(@"C:\data\CUSTOMER.TPS");
 
-foreach (var table in parser.Tables)
+foreach (var table in file.Tables)
 {
     Console.WriteLine($"{table.Name}: {table.Records.Count} records");
 
@@ -58,7 +155,7 @@ foreach (var table in parser.Tables)
 ## Encrypted files
 
 ```csharp
-var parser = TpsParser.TpsParser.Open(
+var file = TpsFile.Open(
     @"C:\data\encrypted.tps",
     new TpsOpenOptions { Owner = "owner-password" });
 ```
@@ -68,21 +165,21 @@ var parser = TpsParser.TpsParser.Open(
 Set `IgnoreErrors` to discard unreadable pages and continue with later valid pages. For a truncated BLOB, it returns the available payload bytes after the BLOB length header. Records from a failed page are never returned partially.
 
 ```csharp
-var parser = TpsParser.TpsParser.Open(
+var file = TpsFile.Open(
     @"C:\data\damaged.tps",
     new TpsOpenOptions { IgnoreErrors = true });
 ```
 
 ## API notes
 
-- `TpsParser.Open` throws `TpsParseException` when the file cannot be opened or parsed.
-- `TpsParser.TryOpen` returns a `TpsParseError` instead of throwing.
+- `TpsFile.Open` throws `TpsParseException` when the file cannot be opened or parsed.
+- `TpsFile.TryOpen` returns a `TpsParseError` instead of throwing.
 - Field lookups accept full field names like `CUS:CUSTNUMBER` and unambiguous short names like `CUSTNUMBER`. When a short name occurs more than once, use its table-qualified name.
 - BCD/DECIMAL values are preserved losslessly as strings through `GetDecimalString`; `TryGetDecimal` is available when the value fits .NET `decimal`.
 - `StringEncoding` applies to field values, MEMO text, and table/schema names.
 - TIME values preserve hours, minutes, seconds, and hundredths of a second.
 - `GetBlob` returns a new byte array each call.
-- The TPS parser remains read-only; CSV export is provided by the inspector and
+- The TPS parser remains read-only; CSV export is provided by the CLI and
   never modifies the source TPS file.
 
 ## Attribution and license
