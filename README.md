@@ -4,14 +4,15 @@
 files and reading their tables and records. `TpsReader.Tool` supplies the `tps`
 command for schema discovery, filtering, JSON/JSONL output, and CSV export.
 
-Both packages target .NET 9. Version 0.3.0 is a breaking rename from
-`TpsParser` and `TpsInspector`; no compatibility namespace or shim package is
-provided.
+Both packages target .NET 8 and support .NET 8 or later. The tool automatically
+rolls forward to a newer major runtime when .NET 8 is not installed. Version
+0.3.0 is a breaking rename from `TpsParser` and `TpsInspector`; no compatibility
+namespace or shim package is provided.
 
 ## Library usage
 
 ```powershell
-dotnet add package TpsReader --version 0.3.1
+dotnet add package TpsReader --version 0.3.2
 ```
 
 ### Basic usage
@@ -131,7 +132,7 @@ data page is discarded atomically; no partial record from that page is returned.
 Install the tool package while keeping the short `tps` command:
 
 ```powershell
-dotnet tool install --global TpsReader.Tool --version 0.3.1
+dotnet tool install --global TpsReader.Tool --version 0.3.2
 tps --help
 ```
 

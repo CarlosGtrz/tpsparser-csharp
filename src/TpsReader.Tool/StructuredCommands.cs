@@ -549,7 +549,10 @@ internal static class StructuredJson
             ["source"] = source,
             ["tables"] = tables.Select(CreateTableSchema).ToArray()
         };
-        output.WriteLine(JsonSerializer.Serialize(document, IndentedContext.StringObjectDictionary));
+        output.WriteLine(JsonSerializer.Serialize(
+            document,
+            typeof(Dictionary<string, object?>),
+            IndentedContext));
     }
 
     public static void WriteRows(string source, QueryResult query, string blobMode, TextWriter output)
@@ -573,7 +576,10 @@ internal static class StructuredJson
             },
             ["rows"] = query.Records.Select(record => CreateRow(query, record, blobMode, includeVersion: false)).ToArray()
         };
-        output.WriteLine(JsonSerializer.Serialize(document, IndentedContext.StringObjectDictionary));
+        output.WriteLine(JsonSerializer.Serialize(
+            document,
+            typeof(Dictionary<string, object?>),
+            IndentedContext));
     }
 
     public static void WriteRowsJsonLines(QueryResult query, string blobMode, TextWriter output)
@@ -582,7 +588,8 @@ internal static class StructuredJson
         {
             output.WriteLine(JsonSerializer.Serialize(
                 CreateRow(query, record, blobMode, includeVersion: true),
-                CompactContext.StringObjectDictionary));
+                typeof(Dictionary<string, object?>),
+                CompactContext));
         }
     }
 
