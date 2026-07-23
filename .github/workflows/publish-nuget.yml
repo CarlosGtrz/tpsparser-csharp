@@ -121,3 +121,98 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload $env:RELEASE_TAG $env:RELEASE_ASSET --repo $env:GITHUB_REPOSITORY --clobber
+
+  publish-native-unix:
+    name: Publish ${{ matrix.rid }} native AOT archive
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+
+    steps:
+      - name: Check out release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Build ${{ matrix.rid }} native AOT executable
+        shell: bash
+        run: |
+          dotnet publish src/TpsReader.Tool/TpsReader.Tool.csproj \
+            --configuration Release \
+            --runtime "${{ matrix.rid }}" \
+            --self-contained true \
+            -p:PublishAot=true \
+            -p:WarningsAsErrors=IL3050 \
+            --output "artifacts/aot/${{ matrix.rid }}"
+
+      - name: Smoke test native executable
+        shell: bash
+        run: |
+          executable="artifacts/aot/${{ matrix.rid }}/TpsReader.Tool"
+
+          "$executable" --help
+          "$executable" schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUS
+
+      - name: Create and verify ${{ matrix.rid }} release archive
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          release_directory="artifacts/release"
+          staging_directory="artifacts/staging/${{ matrix.rid }}"
+          verification_directory="artifacts/verify/${{ matrix.rid }}"
+          asset_name="tps-${RELEASE_TAG}-${{ matrix.rid }}.zip"
+          asset_path="${release_directory}/${asset_name}"
+
+          mkdir -p "$release_directory" "$staging_directory" "$verification_directory"
+          cp "artifacts/aot/${{ matrix.rid }}/TpsReader.Tool" "${staging_directory}/tps"
+          chmod +x "${staging_directory}/tps"
+
+          (
+            cd "$staging_directory"
+            zip -q "${GITHUB_WORKSPACE}/${asset_path}" tps
+          )
+
+          archive_entries="$(unzip -Z1 "$asset_path")"
+          test "$archive_entries" = "tps"
+
+          unzip -q "$asset_path" -d "$verification_directory"
+          test -x "${verification_directory}/tps"
+          "${verification_directory}/tps" --help
+          "${verification_directory}/tps" schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUS
+
+          echo "RELEASE_ASSET=$asset_path" >> "$GITHUB_ENV"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-artifact-${{ matrix.rid }}-${{ github.event.release.tag_name }}
+          path: artifacts/release/*.zip
+          if-no-files-found: error
+
+      - name: Attach native executable to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" "$RELEASE_ASSET" --repo "$GITHUB_REPOSITORY" --clobber

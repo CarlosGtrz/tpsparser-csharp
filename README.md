@@ -137,8 +137,13 @@ tps --help
 ```
 
 Each [GitHub release](https://github.com/CarlosGtrz/TpsReader/releases) also
-includes `tps-v<version>-win-x64.zip`. It contains a self-contained native AOT
-`tps.exe` for 64-bit Windows and does not require a separate .NET installation.
+includes self-contained native AOT archives:
+
+- `tps-v<version>-win-x64.zip` contains `tps.exe` for 64-bit Windows.
+- `tps-v<version>-linux-x64.zip` contains `tps` for 64-bit glibc-based Linux.
+- `tps-v<version>-osx-arm64.zip` contains `tps` for Apple silicon macOS.
+
+None of these executables require a separate .NET installation.
 
 Build or run it from this repository:
 
