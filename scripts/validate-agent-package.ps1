@@ -175,7 +175,7 @@ try {
     Assert-Condition (Test-Path -LiteralPath $unpackedRoot -PathType Container) 'The npm tarball does not contain the expected package directory.'
 
     $unpackedFiles = @(
-        Get-ChildItem -LiteralPath $unpackedRoot -Recurse -File |
+        Get-ChildItem -LiteralPath $unpackedRoot -Recurse -File -Force |
             ForEach-Object {
                 [IO.Path]::GetRelativePath($unpackedRoot, $_.FullName).Replace('\', '/')
             } |
@@ -198,7 +198,7 @@ try {
         '\bnpm_[A-Za-z0-9]{20,}\b',
         '\bAKIA[0-9A-Z]{16}\b'
     )
-    foreach ($file in Get-ChildItem -LiteralPath $unpackedRoot -Recurse -File) {
+    foreach ($file in Get-ChildItem -LiteralPath $unpackedRoot -Recurse -File -Force) {
         $content = Get-Content -Raw -LiteralPath $file.FullName
         foreach ($pattern in $credentialPatterns) {
             Assert-Condition (-not [regex]::IsMatch($content, $pattern)) "Packed file appears to contain a credential: $($file.FullName)"
