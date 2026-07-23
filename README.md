@@ -253,6 +253,17 @@ See the [agent-skill package documentation](plugins/tpsreader/README.md) for
 prerequisites, supported platforms, security behavior, examples, and update or
 removal commands.
 
+Maintainers can validate the exact release tarball and perform the interactive
+npm/2FA publication with
+[`scripts/publish-agent-skill.ps1`](scripts/publish-agent-skill.ps1). Run it
+with `-WhatIf` first to complete every pre-publication check without logging in
+or publishing.
+
+```powershell
+.\scripts\publish-agent-skill.ps1 -WhatIf
+.\scripts\publish-agent-skill.ps1
+```
+
 ## Migrating to 0.3.0
 
 - Replace the `TpsParser` package, project, assembly, and namespace with
