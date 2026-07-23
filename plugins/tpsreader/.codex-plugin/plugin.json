@@ -1,0 +1,37 @@
+{
+  "name": "tpsreader",
+  "version": "1.0.0",
+  "description": "Safely inspect, query, and explicitly export Clarion TopSpeed TPS files.",
+  "author": {
+    "name": "CarlosGtrz",
+    "url": "https://github.com/CarlosGtrz"
+  },
+  "homepage": "https://github.com/CarlosGtrz/TpsReader",
+  "repository": "https://github.com/CarlosGtrz/TpsReader",
+  "license": "Apache-2.0",
+  "keywords": [
+    "clarion",
+    "topspeed",
+    "tps",
+    "database",
+    "read-only"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "TpsReader",
+    "shortDescription": "Inspect Clarion TopSpeed TPS files safely",
+    "longDescription": "Discover schemas, run bounded read-only queries, and explicitly export Clarion TopSpeed TPS data with the TpsReader CLI.",
+    "developerName": "CarlosGtrz",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Export"
+    ],
+    "websiteURL": "https://github.com/CarlosGtrz/TpsReader",
+    "defaultPrompt": [
+      "Inspect the schema of this TPS file.",
+      "Query selected TPS fields with a safe row limit.",
+      "Export this TPS table to CSV."
+    ]
+  }
+}

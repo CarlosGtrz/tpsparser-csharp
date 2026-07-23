@@ -1,0 +1,14 @@
+{
+  "name": "tpsreader",
+  "owner": {
+    "name": "CarlosGtrz"
+  },
+  "description": "Agent skills for working safely with TpsReader and Clarion TopSpeed files.",
+  "plugins": [
+    {
+      "name": "tpsreader",
+      "source": "./plugins/tpsreader",
+      "description": "Safely inspect, query, and explicitly export Clarion TopSpeed TPS files."
+    }
+  ]
+}

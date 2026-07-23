@@ -1,0 +1,40 @@
+{
+  "name": "@carlosgtrz/tpsreader-agent-skill",
+  "version": "1.0.0",
+  "description": "Multi-agent skill for safely reading Clarion TopSpeed TPS files with TpsReader.",
+  "license": "Apache-2.0",
+  "author": "CarlosGtrz",
+  "homepage": "https://github.com/CarlosGtrz/TpsReader#agent-skill",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CarlosGtrz/TpsReader.git",
+    "directory": "plugins/tpsreader"
+  },
+  "bugs": {
+    "url": "https://github.com/CarlosGtrz/TpsReader/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "agent-skill",
+    "clarion",
+    "topspeed",
+    "tps",
+    "database",
+    "read-only"
+  ],
+  "files": [
+    ".codex-plugin",
+    ".claude-plugin",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  }
+}

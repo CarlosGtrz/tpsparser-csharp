@@ -1,0 +1,152 @@
+name: Validate agent skill
+
+on:
+  pull_request:
+    paths:
+      - ".agents/plugins/**"
+      - ".claude-plugin/**"
+      - "plugins/tpsreader/**"
+      - "scripts/validate-agent-package.ps1"
+      - ".github/workflows/validate-agent-skill.yml"
+      - ".github/workflows/publish-nuget.yml"
+      - "README.md"
+      - "SECURITY.md"
+      - "Apache-2.0.txt"
+      - "src/**"
+      - "tests/**"
+      - "TpsReader.sln"
+  push:
+    branches:
+      - main
+    tags:
+      - "skill-v*"
+    paths:
+      - ".agents/plugins/**"
+      - ".claude-plugin/**"
+      - "plugins/tpsreader/**"
+      - "scripts/validate-agent-package.ps1"
+      - ".github/workflows/validate-agent-skill.yml"
+      - ".github/workflows/publish-nuget.yml"
+      - "README.md"
+      - "SECURITY.md"
+      - "Apache-2.0.txt"
+      - "src/**"
+      - "tests/**"
+      - "TpsReader.sln"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-skill-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate package and clients
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Install pinned agent clients
+        run: |
+          npm install --global \
+            @openai/codex@0.145.0 \
+            @anthropic-ai/claude-code@2.1.218 \
+            @earendil-works/pi-coding-agent@0.81.1
+
+      - name: Validate manifests and npm package
+        shell: pwsh
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $expectedVersion = ''
+          if ($env:REF_TYPE -eq 'tag') {
+            if ($env:REF_NAME -notmatch '^skill-v(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$') {
+              throw "Skill release tag '$env:REF_NAME' is invalid."
+            }
+            $expectedVersion = $Matches.version
+          }
+
+          ./scripts/validate-agent-package.ps1 -ExpectedVersion $expectedVersion
+
+      - name: Validate Claude plugin and marketplace
+        run: |
+          claude plugin validate --strict ./plugins/tpsreader
+          claude plugin validate --strict .
+
+      - name: Smoke-install Codex plugin
+        shell: pwsh
+        run: |
+          $env:CODEX_HOME = Join-Path $env:RUNNER_TEMP 'codex-agent-skill'
+          New-Item -ItemType Directory -Path $env:CODEX_HOME | Out-Null
+
+          codex plugin marketplace add $env:GITHUB_WORKSPACE --json
+          codex plugin list --marketplace tpsreader --available --json
+          codex plugin add tpsreader@tpsreader --json
+
+      - name: Smoke-install Pi package
+        shell: pwsh
+        run: |
+          $env:PI_CODING_AGENT_DIR = Join-Path $env:RUNNER_TEMP 'pi-agent-skill'
+
+          Push-Location ./plugins/tpsreader
+          try {
+            $packResult = npm pack --json --pack-destination $env:RUNNER_TEMP | ConvertFrom-Json
+          }
+          finally {
+            Pop-Location
+          }
+          $tarball = Join-Path $env:RUNNER_TEMP $packResult[0].filename
+
+          pi install $tarball --approve
+          $packages = pi list --approve | Out-String
+          if ($packages -notmatch [regex]::Escape($packResult[0].filename)) {
+            throw "Pi did not list the installed npm tarball."
+          }
+
+      - name: Test CLI and prove fixtures remain unchanged
+        shell: pwsh
+        run: |
+          $fixtures = @(
+            Get-ChildItem -LiteralPath ./tests/TpsReader.Tests/Fixtures -File |
+              Where-Object Extension -IEQ '.tps'
+          )
+          $before = @{}
+          foreach ($fixture in $fixtures) {
+            $before[$fixture.FullName] = (Get-FileHash -Algorithm SHA256 -LiteralPath $fixture.FullName).Hash
+          }
+
+          dotnet restore TpsReader.sln
+          dotnet test TpsReader.sln --configuration Release --no-restore
+          dotnet run --project src/TpsReader.Tool --configuration Release --no-build -- schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUS
+          dotnet run --project src/TpsReader.Tool --configuration Release --no-build -- rows tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUS --limit 2 --format json
+
+          foreach ($fixture in $fixtures) {
+            $after = (Get-FileHash -Algorithm SHA256 -LiteralPath $fixture.FullName).Hash
+            if ($before[$fixture.FullName] -ne $after) {
+              throw "TPS fixture was modified: $($fixture.FullName)"
+            }
+          }

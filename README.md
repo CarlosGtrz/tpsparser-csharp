@@ -12,7 +12,7 @@ namespace or shim package is provided.
 ## Library usage
 
 ```powershell
-dotnet add package TpsReader --version 0.3.2
+dotnet add package TpsReader --version 0.3.3
 ```
 
 ### Basic usage
@@ -132,7 +132,7 @@ data page is discarded atomically; no partial record from that page is returned.
 Install the tool package while keeping the short `tps` command:
 
 ```powershell
-dotnet tool install --global TpsReader.Tool --version 0.3.2
+dotnet tool install --global TpsReader.Tool --version 0.3.3
 tps --help
 ```
 
@@ -228,6 +228,30 @@ tps rows encrypted.tps --owner-env TPS_OWNER --limit 10
 Use `--ignore-errors` only when incomplete recovery is acceptable. Exit codes
 are `0` for success, `1` for invalid path/arguments/query, and `2` for parsing or
 export failures. Structured commands keep diagnostics on stderr.
+
+## Agent skill
+
+The repository includes the portable [`read-tps-files`](plugins/tpsreader/skills/read-tps-files/SKILL.md)
+Agent Skill, packaged as the `tpsreader` plugin for Codex and Claude Code and as
+`@carlosgtrz/tpsreader-agent-skill` for Pi.
+
+```text
+codex plugin marketplace add CarlosGtrz/TpsReader --sparse .agents/plugins --sparse plugins
+codex plugin add tpsreader@tpsreader
+```
+
+```text
+claude plugin marketplace add CarlosGtrz/TpsReader --sparse .claude-plugin plugins
+claude plugin install tpsreader@tpsreader
+```
+
+```text
+pi install npm:@carlosgtrz/tpsreader-agent-skill@1.0.0
+```
+
+See the [agent-skill package documentation](plugins/tpsreader/README.md) for
+prerequisites, supported platforms, security behavior, examples, and update or
+removal commands.
 
 ## Migrating to 0.3.0
 

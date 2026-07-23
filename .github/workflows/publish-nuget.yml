@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   publish:
+    if: startsWith(github.event.release.tag_name, 'v')
     name: Test, pack, and publish
     runs-on: windows-latest
     timeout-minutes: 20
@@ -123,6 +124,7 @@ jobs:
         run: gh release upload $env:RELEASE_TAG $env:RELEASE_ASSET --repo $env:GITHUB_REPOSITORY --clobber
 
   publish-native-unix:
+    if: startsWith(github.event.release.tag_name, 'v')
     name: Publish ${{ matrix.rid }} native AOT archive
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20

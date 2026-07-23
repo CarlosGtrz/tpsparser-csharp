@@ -1,0 +1,4 @@
+interface:
+  display_name: "Read TPS Files"
+  short_description: "Inspect, query, and export Clarion TPS files"
+  default_prompt: "Use $read-tps-files to inspect this TPS file and answer my question using a bounded query."
