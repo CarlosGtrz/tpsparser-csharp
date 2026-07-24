@@ -40,7 +40,7 @@ public sealed class StructuredCliTests
         Assert.Equal(1, root.GetProperty("formatVersion").GetInt32());
         var table = Assert.Single(root.GetProperty("tables").EnumerateArray());
         Assert.Equal(14, table.GetProperty("tableNumber").GetInt32());
-        Assert.Equal("CUS", table.GetProperty("name").GetString());
+        Assert.Equal("CUSTOMER", table.GetProperty("name").GetString());
         Assert.Equal(7, table.GetProperty("recordCount").GetInt32());
         Assert.Equal(8, table.GetProperty("fields").GetArrayLength());
         Assert.Equal("Long", table.GetProperty("fields")[0].GetProperty("type").GetString());

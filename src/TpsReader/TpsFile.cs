@@ -210,8 +210,11 @@ public sealed class TpsFile
                 sourcePath));
         }
 
+        var sourceTableName = contents.TableDefinitions.Count == 1
+            ? GetSourceTableName(sourcePath)
+            : null;
         var tables = contents.TableDefinitions
-            .Select(table => BuildTable(table.Key, table.Value, contents, options))
+            .Select(table => BuildTable(table.Key, table.Value, contents, options, sourceTableName))
             .ToArray();
         return new TpsFile(tables);
     }
@@ -271,7 +274,8 @@ public sealed class TpsFile
         int tableNumber,
         TableDefinitionRecord definition,
         ParsedTpsFile contents,
-        TpsOpenOptions options)
+        TpsOpenOptions options,
+        string? sourceTableName)
     {
         var fields = definition.Fields
             .Select((field, index) => new TpsField(
@@ -310,7 +314,7 @@ public sealed class TpsFile
                 options))
             .ToArray();
 
-        var name = ResolveTableName(tableNumber, definition, contents.TableNames);
+        var name = ResolveTableName(tableNumber, definition, contents.TableNames, sourceTableName);
         return new TpsTable(tableNumber, name, fields, memos, indexes, records);
     }
 
@@ -429,7 +433,8 @@ public sealed class TpsFile
     private static string ResolveTableName(
         int tableNumber,
         TableDefinitionRecord definition,
-        IReadOnlyDictionary<int, string> tableNames)
+        IReadOnlyDictionary<int, string> tableNames,
+        string? sourceTableName)
     {
         if (tableNames.TryGetValue(tableNumber, out var tableName))
         {
@@ -441,10 +446,26 @@ public sealed class TpsFile
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(sourceTableName))
+        {
+            return sourceTableName;
+        }
+
         var fieldPrefix = definition.Fields.FirstOrDefault()?.TablePrefix;
         return string.IsNullOrWhiteSpace(fieldPrefix)
             ? tableNumber.ToString(CultureInfo.InvariantCulture)
             : fieldPrefix;
+    }
+
+    private static string? GetSourceTableName(string? sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath))
+        {
+            return null;
+        }
+
+        var sourceTableName = Path.GetFileNameWithoutExtension(sourcePath).TrimEnd();
+        return string.IsNullOrWhiteSpace(sourceTableName) ? null : sourceTableName;
     }
 
     private static TpsFieldType MapFieldType(int type) => type switch

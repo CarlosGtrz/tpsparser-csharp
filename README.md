@@ -12,7 +12,7 @@ namespace or shim package is provided.
 ## Library usage
 
 ```powershell
-dotnet add package TpsReader --version 0.3.3
+dotnet add package TpsReader --version 0.3.4
 ```
 
 ### Basic usage
@@ -62,6 +62,12 @@ var companies = customers.Records
 Use `GetTable(string)` for a case-insensitive table name or `GetTable(int)` for
 a table number. Parameterless `GetTable()` succeeds only when the file contains
 exactly one table.
+
+Table names prefer meaningful TPS metadata. For an unnamed single-table file
+opened from a path, the name is the source filename without its path or final
+extension (`CUSTOMER.TPS` becomes `CUSTOMER`). Unnamed tables from streams,
+byte arrays, and superfiles fall back to their field prefix, then their table
+number.
 
 Records support an indexer, generic conversion, and familiar typed helpers:
 
@@ -132,7 +138,7 @@ data page is discarded atomically; no partial record from that page is returned.
 Install the tool package while keeping the short `tps` command:
 
 ```powershell
-dotnet tool install --global TpsReader.Tool --version 0.3.3
+dotnet tool install --global TpsReader.Tool --version 0.3.4
 tps --help
 ```
 
@@ -167,8 +173,8 @@ Inspect structure before requesting records:
 ```powershell
 tps inspect C:\data --recursive
 tps schema C:\data\CUSTOMER.TPS
-tps schema C:\data\CUSTOMER.TPS --table CUS
-tps rows C:\data\CUSTOMER.TPS --table CUS --fields CUSTNUMBER,COMPANY --limit 20
+tps schema C:\data\CUSTOMER.TPS --table CUSTOMER
+tps rows C:\data\CUSTOMER.TPS --table CUSTOMER --fields CUSTNUMBER,COMPANY --limit 20
 ```
 
 `schema` and JSON row documents retain `formatVersion: 1`. `rows` returns at

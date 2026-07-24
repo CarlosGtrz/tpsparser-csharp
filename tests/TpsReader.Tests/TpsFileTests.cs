@@ -9,7 +9,7 @@ public sealed class TpsFileTests
 
         var table = Assert.Single(file.Tables);
         Assert.Equal(14, table.TableNumber);
-        Assert.Equal("CUS", table.Name);
+        Assert.Equal("CUSTOMER", table.Name);
         Assert.Equal(8, table.Fields.Count);
         Assert.Equal(3, table.Indexes.Count);
         Assert.Empty(table.Memos);
@@ -20,8 +20,28 @@ public sealed class TpsFileTests
         Assert.Equal(1, first.GetInt32("CUSTNUMBER"));
         Assert.Equal("William", first.GetString("FIRSTNAME"));
         Assert.Same(table, file.GetTable());
-        Assert.Same(table, file.GetTable("cus"));
+        Assert.Same(table, file.GetTable("customer"));
         Assert.Same(table, file.GetTable(14));
+    }
+
+    [Fact]
+    public void Unnamed_single_table_opened_by_path_uses_source_filename_without_final_extension()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "RENAMED.DATA.TPS");
+        File.Copy(Fixture("CUSTOMER.TPS"), path);
+
+        try
+        {
+            var table = TpsFile.Open(path).GetTable();
+
+            Assert.Equal("RENAMED.DATA", table.Name);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -144,6 +164,7 @@ public sealed class TpsFileTests
 
         var table = Assert.Single(file.Tables);
         Assert.Equal(14, table.TableNumber);
+        Assert.Equal("CUS", table.Name);
         Assert.Equal(7, table.Records.Count);
         Assert.Equal(stream.Length, stream.Position);
         Assert.True(stream.CanRead);
@@ -242,6 +263,7 @@ public sealed class TpsFileTests
 
         var table = Assert.Single(file.Tables);
         Assert.Equal(14, table.TableNumber);
+        Assert.Equal("CUS", table.Name);
         Assert.Equal(7, table.Records.Count);
         Assert.Equal(1, table.GetRecord(16).GetInt32("CUSTNUMBER"));
     }

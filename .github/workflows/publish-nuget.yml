@@ -75,7 +75,7 @@ jobs:
           & $executable --help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          & $executable schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUS
+          & $executable schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUSTOMER
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Create Windows x64 release archive
@@ -171,7 +171,7 @@ jobs:
           executable="artifacts/aot/${{ matrix.rid }}/TpsReader.Tool"
 
           "$executable" --help
-          "$executable" schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUS
+          "$executable" schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUSTOMER
 
       - name: Create and verify ${{ matrix.rid }} release archive
         shell: bash
@@ -201,7 +201,7 @@ jobs:
           unzip -q "$asset_path" -d "$verification_directory"
           test -x "${verification_directory}/tps"
           "${verification_directory}/tps" --help
-          "${verification_directory}/tps" schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUS
+          "${verification_directory}/tps" schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUSTOMER
 
           echo "RELEASE_ASSET=$asset_path" >> "$GITHUB_ENV"
 

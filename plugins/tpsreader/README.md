@@ -53,7 +53,7 @@ Query customer number and company from CUSTOMER.TPS, limited to 20 rows.
 ```
 
 ```text
-Export the CUS table from CUSTOMER.TPS to C:\exports.
+Export the CUSTOMER table from CUSTOMER.TPS to C:\exports.
 ```
 
 The skill discovers schema before reading rows, uses explicit limits, keeps owner keys out of command arguments, and requests confirmation before potentially overwriting export files.
