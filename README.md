@@ -12,7 +12,7 @@ namespace or shim package is provided.
 ## Library usage
 
 ```powershell
-dotnet add package TpsReader --version 0.3.4
+dotnet add package TpsReader --version 0.3.5
 ```
 
 ### Basic usage
@@ -138,7 +138,7 @@ data page is discarded atomically; no partial record from that page is returned.
 Install the tool package while keeping the short `tps` command:
 
 ```powershell
-dotnet tool install --global TpsReader.Tool --version 0.3.4
+dotnet tool install --global TpsReader.Tool --version 0.3.5
 tps --help
 ```
 
@@ -176,6 +176,9 @@ tps schema C:\data\CUSTOMER.TPS
 tps schema C:\data\CUSTOMER.TPS --table CUSTOMER
 tps rows C:\data\CUSTOMER.TPS --table CUSTOMER --fields CUSTNUMBER,COMPANY --limit 20
 ```
+
+`tps --version` prints the CLI package version as a machine-readable
+`MAJOR.MINOR.PATCH` value.
 
 `schema` and JSON row documents retain `formatVersion: 1`. `rows` returns at
 most 100 records by default; use `--limit`, `--skip`, or explicit `--all`.
@@ -252,7 +255,7 @@ claude plugin install tpsreader@tpsreader
 ```
 
 ```text
-pi install npm:@carlosgtrz/tpsreader-agent-skill@1.0.0
+pi install npm:@carlosgtrz/tpsreader-agent-skill@1.0.1
 ```
 
 See the [agent-skill package documentation](plugins/tpsreader/README.md) for

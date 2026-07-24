@@ -10,6 +10,13 @@ internal static class InspectorApplication
 
     public static int Run(string[] arguments, TextWriter output, TextWriter errorOutput)
     {
+        if (arguments.Length == 1 &&
+            arguments[0].Equals("--version", StringComparison.OrdinalIgnoreCase))
+        {
+            output.WriteLine(GetToolVersion());
+            return 0;
+        }
+
         if (arguments.Length == 0 ||
             (arguments.Length == 1 &&
              (arguments[0].Equals("-h", StringComparison.OrdinalIgnoreCase) ||
@@ -279,10 +286,18 @@ internal static class InspectorApplication
         output.WriteLine("  tps schema <file> [--table <name-or-number>] [options]");
         output.WriteLine("  tps rows <file> [query-options]");
         output.WriteLine("  tps export <file> --output <directory> [query-options]");
+        output.WriteLine("  tps --version");
         output.WriteLine();
         output.WriteLine("Run 'tps <command> --help' for command details.");
         output.WriteLine("The legacy path-first 'tps <file-or-directory> [options]' invocation remains supported.");
         output.WriteLine("Search subdirectories with inspect --recursive; export beside a source with legacy --csv.");
+    }
+
+    private static string GetToolVersion()
+    {
+        var version = typeof(InspectorApplication).Assembly.GetName().Version
+            ?? throw new InvalidOperationException("The CLI assembly does not declare a version.");
+        return $"{version.Major}.{version.Minor}.{version.Build}";
     }
 
     private sealed record CommandLineOptions(

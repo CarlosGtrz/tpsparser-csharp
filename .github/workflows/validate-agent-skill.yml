@@ -143,6 +143,11 @@ jobs:
 
           dotnet restore TpsReader.sln
           dotnet test TpsReader.sln --configuration Release --no-restore
+          $expectedVersion = dotnet msbuild src/TpsReader.Tool/TpsReader.Tool.csproj -getProperty:Version -nologo
+          $reportedVersion = (dotnet run --project src/TpsReader.Tool --configuration Release --no-build -- --version | Out-String).Trim()
+          if ($reportedVersion -ne $expectedVersion) {
+            throw "CLI reported version '$reportedVersion'; expected '$expectedVersion'."
+          }
           dotnet run --project src/TpsReader.Tool --configuration Release --no-build -- schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUSTOMER
           dotnet run --project src/TpsReader.Tool --configuration Release --no-build -- rows tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUSTOMER --limit 2 --format json
 

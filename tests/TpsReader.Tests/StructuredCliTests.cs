@@ -23,6 +23,22 @@ public sealed class StructuredCliTests
     }
 
     [Fact]
+    public void Version_writes_the_machine_readable_package_version()
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var assemblyVersion = typeof(InspectorApplication).Assembly.GetName().Version!;
+
+        var exitCode = InspectorApplication.Run(["--version"], output, error);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        Assert.Equal(
+            $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}{Environment.NewLine}",
+            output.ToString());
+    }
+
+    [Fact]
     public void Schema_writes_parseable_metadata_json_and_can_select_a_table()
     {
         var output = new StringWriter();

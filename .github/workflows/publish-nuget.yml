@@ -72,6 +72,11 @@ jobs:
         run: |
           $executable = 'artifacts/aot/win-x64/TpsReader.Tool.exe'
 
+          $reportedVersion = (& $executable --version | Out-String).Trim()
+          if ($reportedVersion -ne $env:PACKAGE_VERSION) {
+            throw "Native CLI reported version '$reportedVersion'; expected '$env:PACKAGE_VERSION'."
+          }
+
           & $executable --help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -167,8 +172,11 @@ jobs:
 
       - name: Smoke test native executable
         shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           executable="artifacts/aot/${{ matrix.rid }}/TpsReader.Tool"
+          test "$("$executable" --version)" = "${RELEASE_TAG#v}"
 
           "$executable" --help
           "$executable" schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUSTOMER
@@ -200,6 +208,7 @@ jobs:
 
           unzip -q "$asset_path" -d "$verification_directory"
           test -x "${verification_directory}/tps"
+          test "$("${verification_directory}/tps" --version)" = "${RELEASE_TAG#v}"
           "${verification_directory}/tps" --help
           "${verification_directory}/tps" schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUSTOMER
 
