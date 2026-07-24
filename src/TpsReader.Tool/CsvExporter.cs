@@ -7,6 +7,8 @@ namespace TpsReader.Tool;
 internal static class CsvExporter
 {
     private static readonly Encoding Utf8WithBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+    private static readonly HashSet<char> InvalidFileNameCharacters =
+        [.. Path.GetInvalidFileNameChars(), '<', '>', ':', '"', '/', '\\', '|', '?', '*'];
 
     public static IReadOnlyList<string> Export(string sourcePath, IReadOnlyList<TpsTable> tables)
     {
@@ -272,9 +274,8 @@ internal static class CsvExporter
 
     private static string SanitizeFileNamePart(string value, string fallback)
     {
-        var invalidCharacters = Path.GetInvalidFileNameChars();
         var sanitized = new string(value
-            .Select(character => invalidCharacters.Contains(character) ? '_' : character)
+            .Select(character => InvalidFileNameCharacters.Contains(character) ? '_' : character)
             .ToArray())
             .TrimEnd('.', ' ');
         return string.IsNullOrWhiteSpace(sanitized) ? fallback : sanitized;

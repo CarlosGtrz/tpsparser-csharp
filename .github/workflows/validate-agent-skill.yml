@@ -143,8 +143,8 @@ jobs:
 
           dotnet restore TpsReader.sln
           dotnet test TpsReader.sln --configuration Release --no-restore
-          dotnet run --project src/TpsReader.Tool --configuration Release --no-build -- schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUS
-          dotnet run --project src/TpsReader.Tool --configuration Release --no-build -- rows tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUS --limit 2 --format json
+          dotnet run --project src/TpsReader.Tool --configuration Release --no-build -- schema tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUSTOMER
+          dotnet run --project src/TpsReader.Tool --configuration Release --no-build -- rows tests/TpsReader.Tests/Fixtures/CUSTOMER.TPS --table CUSTOMER --limit 2 --format json
 
           foreach ($fixture in $fixtures) {
             $after = (Get-FileHash -Algorithm SHA256 -LiteralPath $fixture.FullName).Hash
